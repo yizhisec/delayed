@@ -1,0 +1,7 @@
+.*
+*.py[co]
+!.gitignore
+bin/
+include/
+lib/
+pip-selfcheck.json

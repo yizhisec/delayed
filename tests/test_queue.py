@@ -3,21 +3,20 @@
 from delayed.queue import Queue
 from delayed.task import Task
 
-from .common import CONN, func, DEQUEUED_KEY, ENQUEUED_KEY, QUEUE_NAME
+from .common import CONN, func, DEQUEUED_KEY, ENQUEUED_KEY, QUEUE, QUEUE_NAME
 
 
 def test_enqueue():
     CONN.delete(QUEUE_NAME, ENQUEUED_KEY)
 
-    queue = Queue(QUEUE_NAME, CONN)
     task = Task.create(func, (1, 2))
-    queue.enqueue(task)
+    QUEUE.enqueue(task)
     assert task.id > 0
     assert CONN.llen(QUEUE_NAME) == 1
     assert CONN.zcard(ENQUEUED_KEY) == 1
 
     task2 = Task.create(func, (1, 2))
-    queue.enqueue(task2)
+    QUEUE.enqueue(task2)
     assert task2.id == task.id + 1
     assert CONN.llen(QUEUE_NAME) == 2
     assert CONN.zcard(ENQUEUED_KEY) == 2
@@ -28,12 +27,11 @@ def test_dequeue():
     CONN.delete(QUEUE_NAME, ENQUEUED_KEY)
 
     task = Task.create(func, (1, 2))
-    queue = Queue(QUEUE_NAME, CONN)
-    assert queue.dequeue() is None
+    assert QUEUE.dequeue() is None
 
-    queue.enqueue(task)
+    QUEUE.enqueue(task)
     task_id = task.id
-    task = queue.dequeue()
+    task = QUEUE.dequeue()
     assert CONN.llen(QUEUE_NAME) == 0
     assert task.id == task_id
     assert task.module_name == 'tests.common'
@@ -48,10 +46,9 @@ def test_release():
     CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY)
 
     task = Task.create(func, (1, 2))
-    queue = Queue(QUEUE_NAME, CONN)
-    queue.enqueue(task)
-    task = queue.dequeue()
-    queue.release(task)
+    QUEUE.enqueue(task)
+    task = QUEUE.dequeue()
+    QUEUE.release(task)
     assert CONN.zcard(DEQUEUED_KEY) == 0
 
 
@@ -75,10 +72,9 @@ def test_requeue_lost():
     CONN.delete(QUEUE_NAME, ENQUEUED_KEY)
 
     task = Task.create(func, (1, 2))
-    queue = Queue(QUEUE_NAME, CONN)
-    queue.enqueue(task)
+    QUEUE.enqueue(task)
     CONN.lpop(QUEUE_NAME)
-    queue.requeue_lost(0)
-    task = queue.dequeue()
+    QUEUE.requeue_lost(0)
+    task = QUEUE.dequeue()
     assert task is not None
-    queue.release(task)
+    QUEUE.release(task)

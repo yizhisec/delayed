@@ -2,14 +2,14 @@
 
 import os
 
-from delayed.queue import Queue
 from delayed.task import Task
 from delayed.worker import Worker
 
-from .common import CONN, QUEUE_NAME
+from .common import CONN, delayed_write, QUEUE, QUEUE_NAME
 
 
-FAILED_NAME = QUEUE_NAME + '_failed'
+TEST_STRING = 'test'
+ERROR_STRING = 'error'
 
 
 def error_func():
@@ -21,22 +21,24 @@ def test_run_worker():
         worker.stop()
 
     def error_handler(task, exit_status, error):
-        os.write(w, 'error')
+        os.write(w, ERROR_STRING)
         worker.stop()
 
     CONN.delete(QUEUE_NAME)
     r, w = os.pipe()
-    task = Task.create(os.write, (w, 'test'))
-    queue = Queue(QUEUE_NAME, CONN)
-    queue.enqueue(task)
+    task = Task.create(os.write, (w, TEST_STRING))
+    QUEUE.enqueue(task)
     worker = Worker(CONN, QUEUE_NAME, success_handler=success_handler, error_handler=error_handler)
     worker.run()
-    assert os.read(r, 4) == 'test'
+    assert os.read(r, 4) == TEST_STRING
 
-    CONN.delete(FAILED_NAME)
     task = Task.create(error_func)
-    queue.enqueue(task)
+    QUEUE.enqueue(task)
     worker.run()
-    assert os.read(r, 5) == 'error'
+    assert os.read(r, 5) == ERROR_STRING
+
+    delayed_write.delay(w, TEST_STRING)
+    worker.run()
+    assert os.read(r, 4) == TEST_STRING
     os.close(r)
     os.close(w)

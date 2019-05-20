@@ -4,12 +4,10 @@ import logging
 import errno
 import select
 
-from .queue import Queue
-
 
 class Sweeper(object):
-    def __init__(self, conn, queue_name, interval=60, timeout=600):
-        self._queue = Queue(queue_name, conn)
+    def __init__(self, queue, interval=60, timeout=600):
+        self._queue = queue
         self._interval = interval * 1000
         self._timeout = timeout
         self._poll = select.poll()

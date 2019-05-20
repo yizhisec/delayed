@@ -16,7 +16,7 @@ def error_func():
     raise Exception('test error')
 
 
-def test_run_worker():
+def atest_run_worker():
     def success_handler(task):
         worker.stop()
 

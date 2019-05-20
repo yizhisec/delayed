@@ -71,10 +71,28 @@ def test_len():
 def test_requeue_lost():
     CONN.delete(QUEUE_NAME, ENQUEUED_KEY)
 
-    task = Task.create(func, (1, 2))
-    QUEUE.enqueue(task)
+    task1 = Task.create(func, (1, 2))
+    task2 = Task.create(func, (1, 2))
+    queue = Queue(QUEUE_NAME, CONN, 1)
+    queue.enqueue(task1)
+    queue.enqueue(task2)
+    assert queue.len() == 2
+
     CONN.lpop(QUEUE_NAME)
-    QUEUE.requeue_lost(0)
-    task = QUEUE.dequeue()
+    assert queue.len() == 1
+
+    queue.requeue_lost(0)
+    assert queue.len() == 1
+
+    task = queue.dequeue()
     assert task is not None
-    QUEUE.release(task)
+    assert queue.len() == 0
+    queue.release(task)
+
+    queue.requeue_lost(0)
+    assert queue.len() == 1
+
+    task = queue.dequeue()
+    assert task is not None
+    assert queue.len() == 0
+    queue.release(task)

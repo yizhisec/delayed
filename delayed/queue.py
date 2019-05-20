@@ -12,7 +12,7 @@ if #enqueued_tasks == 0 then
 end
 local queue = redis.call('lrange', KEYS[1], 0, -1)
 for k, v in pairs(queue) do
-    table.remove(enqueued_tasks, v)
+    table.remove(enqueued_tasks, k)
 end
 for k, v in pairs(enqueued_tasks) do
     redis.call('lpush', KEYS[1], v)
@@ -62,7 +62,7 @@ class Queue(object):
     def requeue_lost(self, timeout):
         # should call it periodically to prevent losing tasks
         # the lost tasks were those popped from the queue but not existed in the dequeued key
-        if self.len() > self._busy_len:  # the queue is busy now, should requeue tasks later
+        if self.len() >= self._busy_len:  # the queue is busy now, should requeue tasks later
             return
         before = current_timestamp() - timeout
         self._script(keys=(self._name, self._enqueued_key), args=(before,))

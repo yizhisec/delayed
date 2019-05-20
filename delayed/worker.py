@@ -113,9 +113,11 @@ class Worker(object):
                         os.kill(pid, signal.SIGTERM)
                     continue
         except Exception as e:
-            logging.exception('monitor task error')
+            logging.exception('monitor task %d error', task.id)
             if self._error_handler:
                 self._error_handler(task, None, e)
+        else:
+            self._release_task(task)
 
     def _handler_success(self, task):
         try:
@@ -136,7 +138,15 @@ class Worker(object):
         try:
             task.run()
         except:
-            logging.exception('task failed')
+            logging.exception('task %d failed', task.id)
             error_code = 1
         finally:
+            self._release_task(task)
             os._exit(error_code)
+
+    def _release_task(self, task):
+        # the task can be released twice by both the monitor and the worker
+        try:
+            self._queue.release(task)
+        except Exception:
+            logging.exception('release task %d failed', task.id)

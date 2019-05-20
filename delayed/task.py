@@ -13,14 +13,44 @@ loads = pickle.loads
 
 
 class Task(object):
-    __slots__ = ['id', '_module_name', '_func_name', '_args', '_kwargs']
+    __slots__ = ['_id', '_module_name', '_func_name', '_args', '_kwargs', '_data']
 
     def __init__(self, id, module_name, func_name, args, kwargs):
-        self.id = id
+        self._id = id
         self._module_name = module_name
         self._func_name = func_name
         self._args = args
         self._kwargs = kwargs
+        self._data = None
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, val):
+        self._id = val
+        self._data = None
+
+    @property
+    def module_name(self):
+        return self._module_name
+
+    @property
+    def func_name(self):
+        return self._func_name
+
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def kwargs(self):
+        return self._kwargs
+
+    @property
+    def data(self):
+        return self._data
 
     @classmethod
     def create(cls, func, args=None, kwargs=None):
@@ -31,14 +61,15 @@ class Task(object):
         return cls(None, func.__module__, func.__name__, args, kwargs)
 
     def serialize(self):
-        return dumps((self.id, self._module_name, self._func_name, self._args, self._kwargs))
-
-    def serialize_with_result(self, exit_status, error):
-        return dumps((self.id, self._module_name, self._func_name, self._args, self._kwargs, exit_status, error))
+        if self._data is None:
+            self._data = dumps((self._id, self._module_name, self._func_name, self._args, self._kwargs))
+        return self._data
 
     @classmethod
     def deserialize(cls, data):
-        return cls(*loads(data))
+        task = cls(*loads(data))
+        task._data = data
+        return task
 
     def run(self):
         module = import_module(self._module_name)

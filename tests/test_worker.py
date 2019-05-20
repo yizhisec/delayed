@@ -6,10 +6,9 @@ from delayed.queue import Queue
 from delayed.task import Task
 from delayed.worker import Worker
 
-from .common import conn
+from .common import CONN, QUEUE_NAME
 
 
-QUEUE_NAME = 'default'
 FAILED_NAME = QUEUE_NAME + '_failed'
 
 
@@ -25,16 +24,16 @@ def test_run_worker():
         os.write(w, 'error')
         worker.stop()
 
-    conn.delete(QUEUE_NAME)
+    CONN.delete(QUEUE_NAME)
     r, w = os.pipe()
     task = Task.create(os.write, (w, 'test'))
-    queue = Queue(QUEUE_NAME, conn)
+    queue = Queue(QUEUE_NAME, CONN)
     queue.enqueue(task)
-    worker = Worker(conn, QUEUE_NAME, success_handler=success_handler, error_handler=error_handler)
+    worker = Worker(CONN, QUEUE_NAME, success_handler=success_handler, error_handler=error_handler)
     worker.run()
     assert os.read(r, 4) == 'test'
 
-    conn.delete(FAILED_NAME)
+    CONN.delete(FAILED_NAME)
     task = Task.create(error_func)
     queue.enqueue(task)
     worker.run()

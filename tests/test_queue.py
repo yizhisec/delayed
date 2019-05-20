@@ -82,7 +82,7 @@ def test_requeue_lost():
     task = Task.create(func, (1, 2))
     queue = Queue(QUEUE_NAME, conn)
     queue.enqueue(task)
-    conn.blpop(QUEUE_NAME, 1)
+    conn.lpop(QUEUE_NAME)
     queue.requeue_lost(0)
     task = queue.dequeue()
     assert task is not None

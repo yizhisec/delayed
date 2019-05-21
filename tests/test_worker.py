@@ -15,34 +15,32 @@ ERROR_STRING = 'error'
 def error_func():
     raise Exception('test error')
 
-import logging
 
-def test_run_worker():
-    def success_handler(task):
-        logging.error(123)
-        worker.stop()
+class TestWorker(object):
+    def test_run(self):
+        def success_handler(task):
+            worker.stop()
 
-    def error_handler(task, exit_status, error):
-        logging.error(456)
-        os.write(w, ERROR_STRING)
-        worker.stop()
+        def error_handler(task, exit_status, error):
+            os.write(w, ERROR_STRING)
+            worker.stop()
 
-    CONN.delete(QUEUE_NAME)
-    r, w = os.pipe()
-    task = Task.create(os.write, (w, TEST_STRING))
-    QUEUE.enqueue(task)
-    worker = Worker(CONN, QUEUE_NAME, success_handler=success_handler, error_handler=error_handler)
-    worker.run()
-    assert os.read(r, 4) == TEST_STRING
+        CONN.delete(QUEUE_NAME)
+        r, w = os.pipe()
+        task = Task.create(os.write, (w, TEST_STRING))
+        QUEUE.enqueue(task)
+        worker = Worker(CONN, QUEUE_NAME, success_handler=success_handler, error_handler=error_handler)
+        worker.run()
+        assert os.read(r, 4) == TEST_STRING
 
-    task = Task.create(error_func)
-    QUEUE.enqueue(task)
-    worker.run()
-    assert os.read(r, 5) == ERROR_STRING
+        task = Task.create(error_func)
+        QUEUE.enqueue(task)
+        worker.run()
+        assert os.read(r, 5) == ERROR_STRING
 
-    delayed_write.delay(w, TEST_STRING)
-    worker.run()
-    assert os.read(r, 4) == TEST_STRING
-    os.close(r)
-    os.close(w)
-    worker = None
+        delayed_write.delay(w, TEST_STRING)
+        worker.run()
+        assert os.read(r, 4) == TEST_STRING
+        os.close(r)
+        os.close(w)
+        worker = None

@@ -25,6 +25,14 @@ def test_task_serialize():
     assert task.args == (1,)
     assert task.kwargs == {'b': 2}
 
+    task = Task.create(func, kwargs={'a': 1, 'b': 2})
+    data = task.serialize()
+    task = Task.deserialize(data)
+    assert task.module_name == 'tests.common'
+    assert task.func_name == 'func'
+    assert task.args == ()
+    assert task.kwargs == {'a': 1, 'b': 2}
+
 
 def test_task_run():
     task = Task.create(func, (1, 2))

@@ -8,7 +8,7 @@ from .utils import current_timestamp
 # ARGV: before_timestamp
 REQUEUE_SCRIPT = '''local enqueued_tasks = redis.call('zrangebyscore', KEYS[2], 0, ARGV[1])
 if #enqueued_tasks == 0 then
-    return
+    return 0
 end
 local queue = redis.call('lrange', KEYS[1], 0, -1)
 for k, v in pairs(queue) do
@@ -17,6 +17,7 @@ end
 for k, v in pairs(enqueued_tasks) do
     redis.call('lpush', KEYS[1], v)
 end
+return #enqueued_tasks
 '''
 
 _ENQUEUED_KEY_SUFFIX = '_enqueued'
@@ -63,6 +64,6 @@ class Queue(object):
         # should call it periodically to prevent losing tasks
         # the lost tasks were those popped from the queue but not existed in the dequeued key
         if self.len() >= self._busy_len:  # the queue is busy now, should requeue tasks later
-            return
+            return 0
         before = current_timestamp() - timeout
-        self._script(keys=(self._name, self._enqueued_key), args=(before,))
+        return self._script(keys=(self._name, self._enqueued_key), args=(before,))

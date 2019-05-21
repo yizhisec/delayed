@@ -81,15 +81,16 @@ def test_requeue_lost():
     CONN.lpop(QUEUE_NAME)
     assert queue.len() == 1
 
-    queue.requeue_lost(0)
+    assert queue.requeue_lost(0) == 0
     assert queue.len() == 1
 
     task = queue.dequeue()
     assert task is not None
     assert queue.len() == 0
     queue.release(task)
+    assert queue.len() == 0
 
-    queue.requeue_lost(0)
+    assert queue.requeue_lost(0) == 1
     assert queue.len() == 1
 
     task = queue.dequeue()

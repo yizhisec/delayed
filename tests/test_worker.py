@@ -15,12 +15,15 @@ ERROR_STRING = 'error'
 def error_func():
     raise Exception('test error')
 
+import logging
 
-def atest_run_worker():
+def test_run_worker():
     def success_handler(task):
+        logging.error(123)
         worker.stop()
 
     def error_handler(task, exit_status, error):
+        logging.error(456)
         os.write(w, ERROR_STRING)
         worker.stop()
 
@@ -42,3 +45,4 @@ def atest_run_worker():
     assert os.read(r, 4) == TEST_STRING
     os.close(r)
     os.close(w)
+    worker = None

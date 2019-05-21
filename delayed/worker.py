@@ -9,15 +9,11 @@ import signal
 import time
 
 from .queue import Queue
+from .status import Status
 from .utils import ignore_signal, set_non_blocking
 
 
-class WorkerStatus(object):
-    (
-        STOPPED,
-        RUNNING,
-        STOPPING
-    ) = range(3)
+_BUF_SIZE = 1024
 
 
 class Worker(object):
@@ -27,7 +23,7 @@ class Worker(object):
         self._kill_timeout = kill_timeout
         self._success_handler = success_handler
         self._error_handler = error_handler
-        self._status = WorkerStatus.STOPPED
+        self._status = Status.STOPPED
         r, w = os.pipe()
         set_non_blocking(r)
         set_non_blocking(w)
@@ -35,11 +31,11 @@ class Worker(object):
         self._poll = select.poll()
 
     def run(self):
-        self._status = WorkerStatus.RUNNING
+        self._status = Status.RUNNING
         self._register_signals()
 
         try:
-            while self._status == WorkerStatus.RUNNING:
+            while self._status == Status.RUNNING:
                 try:
                     task = self._queue.dequeue()
                 except Exception:
@@ -60,10 +56,10 @@ class Worker(object):
                                 self._monitor_task(task, pid)
         finally:
             self._unregister_signals()
-            self._status = WorkerStatus.STOPPED
+            self._status = Status.STOPPED
 
     def stop(self):
-        self._status = WorkerStatus.STOPPING
+        self._status = Status.STOPPING
 
     def _register_signals(self):
         signal.signal(signal.SIGCHLD, ignore_signal)
@@ -85,10 +81,20 @@ class Worker(object):
     def _monitor_task(self, task, pid):
         deadline = time.time() + self._timeout
         kill_deadline = deadline + self._kill_timeout
+        r = self._waker[0]
+        killing = False
         try:
             while True:
                 try:
                     if self._poll.poll(100):
+                        try:
+                            while True:
+                                data = os.read(r, _BUF_SIZE)
+                                if not data or len(data) < _BUF_SIZE:
+                                    break
+                        except OSError:  # ignore EAGAIN and EINTR
+                            pass
+
                         p, exit_status = os.waitpid(pid, os.WNOHANG)
                         if p != 0:
                             if exit_status:
@@ -109,8 +115,9 @@ class Worker(object):
                 if now >= deadline:
                     if now >= kill_deadline:
                         os.kill(pid, signal.SIGKILL)
-                    else:
+                    elif not killing:
                         os.kill(pid, signal.SIGTERM)
+                        killing = True
                     continue
         except Exception as e:
             logging.exception('monitor task %d error', task.id)
@@ -137,7 +144,7 @@ class Worker(object):
         error_code = 0
         try:
             task.run()
-        except:
+        except:  # noqa
             logging.exception('task %d failed', task.id)
             error_code = 1
         finally:

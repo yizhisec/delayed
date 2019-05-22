@@ -6,6 +6,7 @@ import os
 import logging
 import select
 import signal
+import sys
 import time
 
 from .queue import Queue
@@ -17,9 +18,9 @@ _BUF_SIZE = 1024
 
 
 class Worker(object):
-    def __init__(self, conn, queue_name, timeout=600, kill_timeout=5, success_handler=None, error_handler=None):
+    def __init__(self, conn, queue_name, term_timeout=600, kill_timeout=5, success_handler=None, error_handler=None):
         self._queue = Queue(queue_name, conn)
-        self._timeout = timeout
+        self._term_timeout = term_timeout
         self._kill_timeout = kill_timeout
         self._success_handler = success_handler
         self._error_handler = error_handler
@@ -79,7 +80,7 @@ class Worker(object):
         self._clean_up()
 
     def _monitor_task(self, task, pid):
-        deadline = time.time() + self._timeout
+        deadline = time.time() + self._term_timeout
         kill_deadline = deadline + self._kill_timeout
         r = self._waker[0]
         killing = False
@@ -119,10 +120,10 @@ class Worker(object):
                         os.kill(pid, signal.SIGTERM)
                         killing = True
                     continue
-        except Exception as e:
+        except Exception:
             logging.exception('monitor task %d error', task.id)
             if self._error_handler:
-                self._error_handler(task, None, e)
+                self._error_handler(task, None, sys.exc_info())
         else:
             self._release_task(task)
 
@@ -132,9 +133,9 @@ class Worker(object):
         except Exception:
             logging.exception('handle success failed')
 
-    def _handle_error(self, task, exit_status, error):
+    def _handle_error(self, task, exit_status, exc_info):
         try:
-            self._error_handler(task, exit_status, error)
+            self._error_handler(task, exit_status, exc_info)
         except Exception:
             logging.exception('handle error failed')
 

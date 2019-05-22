@@ -4,20 +4,25 @@ from .task import Task
 from .utils import current_timestamp
 
 
-# KEYS: queue_name enqueued_key
+# KEYS: queue_name enqueued_key dequeued_key
 # ARGV: before_timestamp
 REQUEUE_SCRIPT = '''local enqueued_tasks = redis.call('zrangebyscore', KEYS[2], 0, ARGV[1])
-if #enqueued_tasks == 0 then
+local dequeued_tasks = redis.call('zrangebyscore', KEYS[3], 0, ARGV[1])
+if #enqueued_tasks == 0 and #dequeued_tasks == 0 then
     return 0
 end
 local queue = redis.call('lrange', KEYS[1], 0, -1)
 for k, v in pairs(queue) do
     table.remove(enqueued_tasks, k)
+    table.remove(dequeued_tasks, k)
 end
 for k, v in pairs(enqueued_tasks) do
     redis.call('lpush', KEYS[1], v)
 end
-return #enqueued_tasks
+for k, v in pairs(dequeued_tasks) do
+    redis.call('lpush', KEYS[1], v)
+end
+return #enqueued_tasks + #dequeued_tasks
 '''
 
 _ENQUEUED_KEY_SUFFIX = '_enqueued'
@@ -66,4 +71,5 @@ class Queue(object):
         if self.len() >= self._busy_len:  # the queue is busy now, should requeue tasks later
             return 0
         before = current_timestamp() - timeout
-        return self._script(keys=(self._name, self._enqueued_key), args=(before,))
+        return self._script(keys=(self._name, self._enqueued_key, self._dequeued_key),
+                            args=(before,))

@@ -66,7 +66,7 @@ class TestQueue(object):
         queue.release(task)
 
     def test_requeue_lost(self):
-        CONN.delete(QUEUE_NAME, ENQUEUED_KEY)
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY)
 
         task1 = Task.create(func, (1, 2))
         task2 = Task.create(func, (1, 2))
@@ -94,3 +94,17 @@ class TestQueue(object):
         assert task is not None
         assert queue.len() == 0
         queue.release(task)
+
+        task3 = Task.create(func, (1, 2))
+        queue.enqueue(task3)
+        assert queue.len() == 1
+
+        task3 = queue.dequeue()
+        assert queue.len() == 0
+        CONN.zrem(ENQUEUED_KEY, task3.data)
+
+        assert queue.requeue_lost(0) == 1
+        assert queue.len() == 1
+
+        task3 = queue.dequeue()
+        queue.release(task3)

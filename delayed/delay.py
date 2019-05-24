@@ -3,26 +3,40 @@
 from .task import Task
 
 
-class _Wrapper(object):
-    def __init__(self, queue, func):
-        self._queue = queue
-        self._func = func
+def delayed(queue):
+    def wrapper(func):
+        def _delay(*args, **kwargs):
+            task = Task.create(func, args, kwargs)
+            queue.enqueue(task)
+            return delay
 
-    def __call__(self, *args, **kwargs):
-        return self._func(*args, **kwargs)
+        def _timeout(seconds):
+            def inner(*args, **kwargs):
+                task = Task.create(func, args, kwargs, seconds)
+                queue.enqueue(task)
+            return inner
 
-    def delay(self, *args, **kwargs):
-        task = Task.create(self._func, args, kwargs)
-        self._queue.enqueue(task)
+        func.delay = _delay
+        func.timeout = _timeout
+        return func
+    return wrapper
 
 
-class Delay(object):
-    def __init__(self, queue):
-        self._queue = queue
+def delay(queue):
+    def wrapper(func):
+        def _delay(*args, **kwargs):
+            task = Task.create(func, args, kwargs)
+            queue.enqueue(task)
+            return delay
+        return _delay
+    return wrapper
 
-    def __call__(self, func):
-        return _Wrapper(self._queue, func)
 
-    def delay(self, func, *args, **kwargs):
-        task = Task.create(func, args, kwargs)
-        self._queue.enqueue(task)
+def delay_in_time(queue):
+    def wrapper(func, timeout):
+        def _delay(*args, **kwargs):
+            task = Task.create(func, args, kwargs, timeout)
+            queue.enqueue(task)
+            return delay
+        return _delay
+    return wrapper

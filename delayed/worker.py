@@ -9,7 +9,6 @@ import signal
 import sys
 import time
 
-from .queue import Queue
 from .status import Status
 from .utils import ignore_signal, set_non_blocking
 
@@ -18,9 +17,8 @@ _BUF_SIZE = 1024
 
 
 class Worker(object):
-    def __init__(self, conn, queue_name, term_timeout=600, kill_timeout=5, success_handler=None, error_handler=None):
-        self._queue = Queue(queue_name, conn)
-        self._term_timeout = term_timeout
+    def __init__(self, queue, kill_timeout=5, success_handler=None, error_handler=None):
+        self._queue = queue
         self._kill_timeout = kill_timeout
         self._success_handler = success_handler
         self._error_handler = error_handler
@@ -80,7 +78,11 @@ class Worker(object):
         self._clean_up()
 
     def _monitor_task(self, task, pid):
-        deadline = time.time() + self._term_timeout
+        now = time.time()
+        if task.timeout:
+            deadline = now + task.timeout / 1000
+        else:
+            deadline = now + self._queue.default_timeout / 1000
         kill_deadline = deadline + self._kill_timeout
         r = self._waker[0]
         killing = False

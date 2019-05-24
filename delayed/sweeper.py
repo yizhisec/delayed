@@ -7,10 +7,9 @@ from .status import Status
 
 
 class Sweeper(object):
-    def __init__(self, queue, interval=60, timeout=600):
+    def __init__(self, queue, interval=60):
         self._queue = queue
         self._interval = interval
-        self._timeout = timeout
         self._status = Status.STOPPED
 
     def run(self):
@@ -19,7 +18,7 @@ class Sweeper(object):
         while self._status == Status.RUNNING:
             time.sleep(self._interval)
             try:
-                self._queue.requeue_lost(self._timeout)
+                self._queue.requeue_lost()
             except Exception:
                 logging.exception('requeue lost task failed')
 

@@ -1,2 +1,2 @@
 hiredis
-redis
+redis>=3.0

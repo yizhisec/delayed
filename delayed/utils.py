@@ -36,7 +36,7 @@ def drain_out(fd):
 
 
 def read_all(fd):
-    all_data = ''
+    all_data = b''
     while True:
         try:
             data = os.read(fd, _BUF_SIZE)

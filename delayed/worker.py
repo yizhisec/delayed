@@ -352,18 +352,18 @@ class PreforkedWorker(Worker):
                                 task = Task.deserialize(task_data)
                             except Exception:
                                 logging.exception('deserialize task failed')
-                                os.write(result_writer, '1')
+                                os.write(result_writer, b'1')
                             else:
                                 error_code = 0
                                 try:
                                     task.run()
                                 except:  # noqa
                                     logging.exception('task %d failed', task.id)
-                                    os.write(result_writer, '1')
+                                    os.write(result_writer, b'1')
                                     if self._error_handler:
                                         self._error_handler(task, 0, sys.exc_info())
                                 else:
-                                    os.write(result_writer, '0')
+                                    os.write(result_writer, b'0')
                                     if self._success_handler:
                                         self._handler_success(task)
                                 finally:

@@ -18,7 +18,6 @@ def test_delayed():
 
     assert delayed_func(1, 2) == 3
     assert delayed_func.__name__ == 'delayed_func'
-    assert delayed_func.func_name == 'delayed_func'
 
     delayed_func.delay(1, 2)
     assert QUEUE.len() == 1

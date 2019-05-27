@@ -9,8 +9,8 @@ from delayed.worker import ForkedWorker, PreforkedWorker
 from .common import CONN, DELAY, QUEUE, QUEUE_NAME
 
 
-TEST_STRING = 'test'
-ERROR_STRING = 'error'
+TEST_STRING = b'test'
+ERROR_STRING = b'error'
 COUNT = 0
 
 

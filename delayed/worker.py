@@ -313,7 +313,7 @@ class PreforkedWorker(Worker):
         except Exception:
             logging.exception('monitor task %d error', task.id)
             if self._error_handler:
-                self._error_handler(task, None, sys.exc_info())
+                self._error_handler(task, 0, sys.exc_info())
 
         self._release_task(task)
 

@@ -62,6 +62,19 @@ class TestQueue(object):
         assert task2.data is not None
         CONN.delete(DEQUEUED_KEY, ENQUEUED_KEY)
 
+    def test_requeue(self):
+        CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
+
+        task = Task.create(func, (1, 2))
+        QUEUE.enqueue(task)
+        task = QUEUE.dequeue()
+        QUEUE.requeue(task)
+
+        assert CONN.zcard(DEQUEUED_KEY) == 0
+        task = QUEUE.dequeue()
+        assert task is not None
+        QUEUE.release(task)
+
     def test_release(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
 

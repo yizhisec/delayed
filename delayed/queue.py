@@ -98,6 +98,17 @@ class Queue(object):
             if data:
                 return Task.deserialize(data)
 
+    def requeue(self, task):
+        data = task.data
+        if not data:
+            return
+        with self._conn.pipeline() as pipe:
+            pipe.rpush(self._name, data)
+            pipe.rpush(self._noti_key, '1')
+            pipe.zadd(self._enqueued_key, {data: (task.timeout or self.default_timeout) + self._requeue_timeout})
+            pipe.zrem(self._dequeued_key, data)
+            pipe.execute()
+
     def release(self, task):  # should call it after finishing the task
         with self._conn.pipeline() as pipe:
             pipe.zrem(self._enqueued_key, task.data)

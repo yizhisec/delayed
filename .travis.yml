@@ -11,6 +11,8 @@ services:
   - redis-server
 install:
   - pip install -r requirements.txt
-  - pip install pytest
+  - pip install pytest pytest-cov codecov
 script:
-  - pytest -v tests
+  - pytest -v --cov=delayed --cov-report term-missing -x tests
+after_success:
+  - codecov

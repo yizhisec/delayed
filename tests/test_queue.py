@@ -68,8 +68,14 @@ class TestQueue(object):
         task = Task.create(func, (1, 2))
         QUEUE.enqueue(task)
         task = QUEUE.dequeue()
-        QUEUE.requeue(task)
 
+        data = task.data
+        task._data = None
+        QUEUE.requeue(task)
+        assert CONN.zcard(DEQUEUED_KEY) == 1
+
+        task._data = data
+        QUEUE.requeue(task)
         assert CONN.zcard(DEQUEUED_KEY) == 0
         task = QUEUE.dequeue()
         assert task is not None

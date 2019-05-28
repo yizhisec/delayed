@@ -19,7 +19,7 @@ class Sweeper(object):
             time.sleep(self._interval)
             try:
                 self._queue.requeue_lost()
-            except Exception:
+            except Exception:  # pragma: no cover
                 logging.exception('requeue lost task failed')
 
         self._status = Status.STOPPED

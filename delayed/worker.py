@@ -11,7 +11,7 @@ import time
 
 from .status import Status
 from .task import Task
-from .utils import drain_out, ignore_signal, non_blocking_pipe, read_all, write_all
+from .utils import drain_out, ignore_signal, non_blocking_pipe, read_all, write_all, write_ignore
 
 
 _SIGNAL_MASK = 0xff
@@ -27,35 +27,32 @@ class Worker(object):
         self._error_handler = error_handler
         self._status = Status.STOPPED
 
-    def run(self):
+    def run(self):  # pragma: no cover
         raise NotImplementedError
-
-    def stop(self):
-        self._status = Status.STOPPING
 
     def _handler_success(self, task):
         try:
             self._success_handler(task)
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('handle success failed')
 
     def _handle_error(self, task, exit_status, exc_info):
         try:
             self._error_handler(task, exit_status, exc_info)
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('handle error failed')
 
     def _requeue_task(self, task):
         try:
             self._queue.requeue(task)
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('requeue task %d failed', task.id)
 
     def _release_task(self, task):
         # the task can be released twice by both the monitor and the worker
         try:
             self._queue.release(task)
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('release task %d failed', task.id)
 
     def _register_signals(self):
@@ -68,7 +65,7 @@ class Worker(object):
 
 
 class ForkedWorker(Worker):
-    __slots__ = ['_waker', '_poll']
+    __slots__ = ['_waker', '_poll', '_child_pid']
 
     def run(self):
         self._status = Status.RUNNING
@@ -78,22 +75,24 @@ class ForkedWorker(Worker):
             while self._status == Status.RUNNING:
                 try:
                     task = self._queue.dequeue()
-                except Exception:
+                except Exception:  # pragma: no cover
                     logging.exception('dequeue task failed')
                 else:
                     if task:
                         gc.disable()  # https://bugs.python.org/issue1336
                         try:
                             pid = os.fork()
-                        except OSError:
+                        except OSError:  # pragma: no cover
                             gc.enable()
                             logging.exception('fork task worker failed')
                         else:
                             gc.enable()
                             if pid == 0:  # child
-                                self._run_task(task)
+                                self._run_task(task)  # pragma: no cover
                             else:  # parent
+                                self._child_pid = pid
                                 self._monitor_task(task, pid)
+                                self._child_pid = None
         finally:
             self._unregister_signals()
             self._status = Status.STOPPED
@@ -106,6 +105,7 @@ class ForkedWorker(Worker):
         self._poll = select.poll()
         signal.set_wakeup_fd(w)
         self._poll.register(r, select.POLLIN)
+        self._child_pid = None
 
     def _unregister_signals(self):
         self._poll.unregister(self._waker[0])
@@ -143,10 +143,10 @@ class ForkedWorker(Worker):
                                     self._requeue_task(task)
                                     return
                             break
-                except OSError as e:
+                except OSError as e:  # pragma: no cover
                     if e.errno != errno.EINTR:
                         raise
-                except select.error as e:
+                except select.error as e:  # pragma: no cover
                     if e.args[0] != errno.EINTR:
                         raise
 
@@ -195,7 +195,7 @@ class PreforkedWorker(Worker):
             while self._status == Status.RUNNING:
                 try:
                     task = self._queue.dequeue()
-                except Exception:
+                except Exception:  # pragma: no cover
                     logging.exception('dequeue task failed')
                 else:
                     if task:
@@ -203,13 +203,13 @@ class PreforkedWorker(Worker):
                             gc.disable()  # https://bugs.python.org/issue1336
                             try:
                                 pid = os.fork()
-                            except OSError:
+                            except OSError:  # pragma: no cover
                                 gc.enable()
                                 logging.exception('fork task worker failed')
                             else:
                                 gc.enable()
                                 if pid == 0:  # child
-                                    self._run_tasks()
+                                    self._run_tasks()  # pragma: no cover
                                 else:  # parent
                                     self._child_pid = pid
                         self._monitor_task(task, self._child_pid)
@@ -296,10 +296,10 @@ class PreforkedWorker(Worker):
 
                         if done:
                             break
-                except OSError as e:
+                except OSError as e:  # pragma: no cover
                     if e.errno != errno.EINTR:
                         raise
-                except select.error as e:
+                except select.error as e:  # pragma: no cover
                     if e.args[0] != errno.EINTR:
                         raise
 
@@ -352,28 +352,29 @@ class PreforkedWorker(Worker):
                                 task = Task.deserialize(task_data)
                             except Exception:
                                 logging.exception('deserialize task failed')
-                                os.write(result_writer, b'1')
+                                write_ignore(result_writer, b'1')
                             else:
                                 error_code = 0
                                 try:
                                     task.run()
-                                except:  # noqa
+                                except Exception:
                                     logging.exception('task %d failed', task.id)
-                                    os.write(result_writer, b'1')
                                     if self._error_handler:
                                         self._error_handler(task, 0, sys.exc_info())
+                                    write_ignore(result_writer, b'1')
                                 else:
-                                    os.write(result_writer, b'0')
                                     if self._success_handler:
                                         self._handler_success(task)
+                                    write_ignore(result_writer, b'0')
                                 finally:
                                     self._release_task(task)
                         else:  # parent has exited or stopped
                             os._exit(error_code)
-                except OSError as e:
+                            return  # for unit test
+                except OSError as e:  # pragma: no cover
                     if e.errno != errno.EINTR:
                         raise
-                except select.error as e:
+                except select.error as e:  # pragma: no cover
                     if e.args[0] != errno.EINTR:
                         raise
         finally:

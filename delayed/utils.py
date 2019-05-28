@@ -26,13 +26,16 @@ def non_blocking_pipe():
 
 
 def drain_out(fd):
-    try:
-        while True:
+    while True:
+        try:
             data = os.read(fd, _BUF_SIZE)
             if not data or len(data) < _BUF_SIZE:
                 break
-    except OSError:  # ignore EAGAIN and EINTR
-        pass
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EINTR:
+                continue
+            if e.errno == errno.EAGAIN:
+                break
 
 
 def read_all(fd):
@@ -46,8 +49,11 @@ def read_all(fd):
                     break
             else:
                 break
-        except OSError:  # ignore EAGAIN and EINTR
-            pass
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EINTR:
+                continue
+            if e.errno == errno.EAGAIN:
+                break
     return all_data
 
 
@@ -56,9 +62,22 @@ def write_all(fd, data):
         try:
             length = os.write(fd, data)
             data = data[length:]
-        except OSError as e:
+        except OSError as e:  # pragma: no cover
             if e.errno == errno.EINTR:
                 continue
+
+
+def write_ignore(fd, data):
+    while True:
+        try:
+            os.write(fd, data)
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EINTR:
+                continue
+            if e.errno == errno.EPIPE:
+                break
+        else:
+            break
 
 
 def current_timestamp():

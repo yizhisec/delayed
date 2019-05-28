@@ -368,7 +368,7 @@ class PreforkedWorker(Worker):
                                         self._handler_success(task)
                                 finally:
                                     self._release_task(task)
-                        else:  # parent has exited
+                        else:  # parent has exited or stopped
                             os._exit(error_code)
                 except OSError as e:
                     if e.errno != errno.EINTR:

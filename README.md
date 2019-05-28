@@ -10,9 +10,10 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## Requirements
 
-1. Python 2.7 or later. (Tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5.)
-2. Most UNIX-like systems (with os.fork() and select.poll() implemented). (Tested on Ubuntu and macOS.)
+1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5. All the processes of a task queue should use the same version of Python. 
+2. Most UNIX-like systems (with os.fork() and select.poll() implemented), tested on Ubuntu and macOS.
 3. Redis 2.6.0 or later.
+4. Keep syncing time among all the machines of a task queue.
 
 ## Getting started
 
@@ -92,17 +93,20 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## QA
 
-1. **Q: What's the "name" param of a queue?**  
-A: It's the key used to store the tasks of the queue. A queue with name "default" will use those keys:
-    * default: list, enqueued tasks
-    * default_id: str, the next task id
-    * default_noti: list, the same length as enqueued tasks
-    * default_enqueued: sorted set, enqueued tasks with their enqueued timestamp 
-    * default_dequeued: sorted set, dequeued tasks with their dequeued timestamp
+1. **Q: What's the limitation on a task function?**  
+A: A task function should be defined in module level (except the `__main__` module). Its `args` and `kwargs` should be picklable. 
 
-2. **Q: Why the worker is slow?**  
-A: The "ForkedWorker" forks a new process for each new task. So all the tasks are isolated and you won't leak memory.  
-To reduce the overhead of forking processes and importing modules, you can switch to "PreforkedWorker":
+2. **Q: What's the `name` param of a queue?**  
+A: It's the key used to store the tasks of the queue. A queue with name "default" will use those keys:
+    * default: list, enqueued tasks.
+    * default_id: str, the next task id.
+    * default_noti: list, the same length as enqueued tasks.
+    * default_enqueued: sorted set, enqueued tasks with their enqueued timestamp.
+    * default_dequeued: sorted set, dequeued tasks with their dequeued timestamp.
+
+3. **Q: Why the worker is slow?**  
+A: The `ForkedWorker` forks a new process for each new task. So all the tasks are isolated and you won't leak memory.  
+To reduce the overhead of forking processes and importing modules, if your task function code won't be changed in the worker's lifetime, you can switch to `PreforkedWorker`:
 
     ```python
     import redis
@@ -115,14 +119,14 @@ To reduce the overhead of forking processes and importing modules, you can switc
     worker.run()
     ``` 
 
-3. **Q: How does a forked worker run?**  
+4. **Q: How does a `ForkedWorker` run?**  
 A: It runs such a loop:
     1. It dequeues a task from the queue periodically.
     2. It forks a child process to run the task.
     3. It kills the child process if the child runs out of time.
     4. When the child process exits, it releases the task.
 
-4. **Q: How does a preforked worker run?**  
+5. **Q: How does a `PreforkedWorker` run?**  
 A: It runs such a loop:
     1. It dequeues a task from the queue periodically.
     2. If it has no child process, it forks a new one.
@@ -130,27 +134,27 @@ A: It runs such a loop:
     4. It kills the child process if the child runs out of time.
     5. When the child process exits or it received result from the pipe, it releases the task.
 
-5. **Q: How does the child process of a worker run?**  
-A: the child of a forked worker just runs the task, unmarks the task as dequeued, then exits.
-The child of a preforked worker runs such a loop:
+6. **Q: How does the child process of a worker run?**  
+A: the child of a `ForkedWorker` just runs the task, unmarks the task as dequeued, then exits.
+The child of a `PreforkedWorker` runs such a loop:
     1. It tries to receive a task from the pipe.
     2. If the pipe has been closed, it exits.
     3. It runs the task.
     4. It sends the task result to the pipe.
     5. It releases the task.
 
-6. **Q: What's lost tasks?**  
+7. **Q: What's lost tasks?**  
 A: There are 2 situations a task might get lost:
     * a worker popped a task notification, then got killed before dequeueing the task.
-    * a worker dequeued a task, then both the monitor and its child process got killed before they release the task.
+    * a worker dequeued a task, then both the monitor and its child process got killed before they releasing the task.
 
-7. **Q: How to recovery lost tasks?**  
+8. **Q: How to recovery lost tasks?**  
 A: Run a sweeper. It dose two things:
     * it keeps the task notification length the same as the task queue. 
-    * it moves the timeout dequeued tasks to the task queue.
+    * it moves the timeout dequeued tasks back to the task queue.
 
 8. **Q: How to set the timeout of tasks?**  
-A: You can set the default_timeout of a queue or timeout of a task:
+A: You can set the `default_timeout` of a queue or `timeout` of a task:
 
     ```python
     from delayed.delay import delay_in_time
@@ -164,7 +168,7 @@ A: You can set the default_timeout of a queue or timeout of a task:
     ```
 
 9. **Q: How to handle the finished tasks?**  
-A: Set the success_handler and error_handler of the worker:
+A: Set the `success_handler` and `error_handler` of the worker. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
     def success_handler(task):
@@ -179,5 +183,5 @@ A: Set the success_handler and error_handler of the worker:
     worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
     ```
 
-10. **Q: Why does sometimes both success_handler and error_handler be called for a single task?**  
-A: When the child process got killed after the success_handler be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful. 
+10. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
+A: When the child process got killed after the `success_handler` be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful. 

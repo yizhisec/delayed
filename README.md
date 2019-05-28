@@ -1,4 +1,4 @@
-# delayed [![Build status](https://travis-ci.org/keakon/delayed?branch=master)](https://secure.travis-ci.org/keakon/delayed)
+# delayed [![Build status](https://travis-ci.org/keakon/delayed.svg?branch=master)](https://secure.travis-ci.org/keakon/delayed)
 
 Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org/).
 

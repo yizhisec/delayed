@@ -3,6 +3,8 @@
 !.gitignore
 !.travis.yml
 bin/
+delayed.egg-info/
+dist/
 include/
 lib/
 pip-selfcheck.json

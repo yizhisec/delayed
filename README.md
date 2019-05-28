@@ -23,7 +23,13 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     $ redis-server
     ```
 
-2. Create a task queue:
+2. Install delayed:
+
+    ```bash
+    $ pip install delayed
+    ```
+
+3. Create a task queue:
 
     ```python
     import redis
@@ -33,7 +39,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     queue = Queue(name='default', conn=conn)
     ```
 
-3. Two ways to enqueue a task:
+4. Two ways to enqueue a task:
 
     * Define a task function and enqueue it:
 
@@ -65,7 +71,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         delayed(add)(1, b=2)  # same as above
         ```
 
-4. Run a task worker (or more) in a separated process:
+5. Run a task worker (or more) in a separated process:
 
     ```python
     import redis
@@ -78,7 +84,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     worker.run()
     ``` 
 
-5. Run a task sweeper in a separated process to recovery lost tasks (mainly due to the worker got killed):
+6. Run a task sweeper in a separated process to recovery lost tasks (mainly due to the worker got killed):
 
     ```python
     import redis

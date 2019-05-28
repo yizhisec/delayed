@@ -1,4 +1,4 @@
-# delayed
+# delayed ![Travis CI test result](https://travis-ci.org/keakon/delayed.svg?branch=master)
 
 Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org/).
 
@@ -10,7 +10,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## Requirements
 
-1. Python 2.7 or later. (Tested on Python 2.7, 3.3 - 3.7 and PyPy 3.6.)
+1. Python 2.7 or later. (Tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5.)
 2. Most UNIX-like systems (with os.fork() and select.poll() implemented). (Tested on Ubuntu and macOS.)
 3. Redis 2.6.0 or later.
 

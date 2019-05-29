@@ -5,6 +5,7 @@ import signal
 import threading
 import time
 
+from delayed.status import Status
 from delayed.task import Task
 from delayed.worker import ForkedWorker, PreforkedWorker
 
@@ -23,6 +24,41 @@ def error_func():
 def wait(fd):
     os.write(fd, b'1')
     time.sleep(10)
+
+
+class TestWorker(object):
+    def test_requeue_task(self, monkeypatch):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        pid = os.getpid()
+        _exit = os._exit
+        _close = os.close
+
+        def exit(n):
+            assert n == 1
+            os.kill(pid, signal.SIGHUP)
+            _exit(n)
+
+        def close(fd):
+            if os.getpid() == pid:
+                _close(fd)
+            else:
+                raise Exception('close error')
+
+        monkeypatch.setattr(os, '_exit', exit)
+        monkeypatch.setattr(os, 'close', close)
+
+        worker = ForkedWorker(QUEUE)
+        task = Task.create(func, (1, 2))
+        QUEUE.enqueue(task)
+        worker.run()
+
+        worker = PreforkedWorker(QUEUE)
+        task = Task.create(func, (1, 2))
+        QUEUE.enqueue(task)
+        worker.run()
+
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
 
 class TestForkedWorker(object):
@@ -93,6 +129,39 @@ class TestForkedWorker(object):
 
         os.close(r)
         os.close(w)
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_term_worker(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        def error_handler(task, kill_signal, exc_info):
+            assert kill_signal == signal.SIGTERM
+            worker._status = Status.STOPPED
+
+        r, w = os.pipe()
+        task = Task.create(wait, (w,), timeout=0.01)
+        QUEUE.enqueue(task)
+        worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker.run()
+
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_kill_worker(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+        def error_handler(task, kill_signal, exc_info):
+            assert kill_signal == signal.SIGKILL
+            worker._status = Status.STOPPED
+
+        r, w = os.pipe()
+        task = Task.create(wait, (w,), timeout=0.01)
+        QUEUE.enqueue(task)
+        worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker.run()
+
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
 
@@ -174,4 +243,62 @@ class TestPreforkedWorker(object):
 
         close(r)
         close(w)
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_run_tasks_with_deserialize_error(self, monkeypatch):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        pid = os.getpid()
+        _read = os.read
+
+        def read(fd, size):
+            if os.getpid() == pid:
+                return _read(fd, size)
+            os.read = _read
+            os.close(fd)
+            return 'error'
+
+        def _exit(n):
+            assert n == 1
+
+        monkeypatch.setattr(os, 'read', read)
+        monkeypatch.setattr(os, '_exit', lambda n: _exit)
+
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        task_writer = worker._task_channel[1]
+        os.write(task_writer, ERROR_STRING)
+        worker._run_tasks()
+
+    def test_term_worker(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        def error_handler(task, kill_signal, exc_info):
+            assert kill_signal == signal.SIGTERM
+            worker._status = Status.STOPPED
+
+        r, w = os.pipe()
+        task = Task.create(wait, (w,), timeout=0.01)
+        QUEUE.enqueue(task)
+        worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker.run()
+
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_kill_worker(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+        def error_handler(task, kill_signal, exc_info):
+            assert kill_signal == signal.SIGKILL
+            worker._status = Status.STOPPED
+
+        r, w = os.pipe()
+        task = Task.create(wait, (w,), timeout=0.01)
+        QUEUE.enqueue(task)
+        worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker.run()
+
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)

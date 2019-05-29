@@ -8,7 +8,6 @@ def delayed(queue):
         def _delay(*args, **kwargs):
             task = Task.create(func, args, kwargs)
             queue.enqueue(task)
-            return delay
 
         def _timeout(seconds):
             def inner(*args, **kwargs):
@@ -27,7 +26,6 @@ def delay(queue):
         def _delay(*args, **kwargs):
             task = Task.create(func, args, kwargs)
             queue.enqueue(task)
-            return delay
         return _delay
     return wrapper
 
@@ -37,6 +35,5 @@ def delay_in_time(queue):
         def _delay(*args, **kwargs):
             task = Task.create(func, args, kwargs, timeout)
             queue.enqueue(task)
-            return delay
         return _delay
     return wrapper

@@ -157,7 +157,7 @@ class ForkedWorker(Worker):
                     elif not killing:
                         os.kill(pid, signal.SIGTERM)
                         killing = True
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('monitor task %d error', task.id)
             if self._error_handler:
                 self._error_handler(task, None, sys.exc_info())
@@ -310,7 +310,7 @@ class PreforkedWorker(Worker):
                     elif not killing:
                         os.kill(pid, signal.SIGTERM)
                         killing = True
-        except Exception:
+        except Exception:  # pragma: no cover
             logging.exception('monitor task %d error', task.id)
             if self._error_handler:
                 self._error_handler(task, 0, sys.exc_info())

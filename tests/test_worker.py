@@ -5,7 +5,6 @@ import signal
 import threading
 import time
 
-from delayed.status import Status
 from delayed.task import Task
 from delayed.worker import ForkedWorker, PreforkedWorker
 
@@ -136,7 +135,7 @@ class TestForkedWorker(object):
 
         def error_handler(task, kill_signal, exc_info):
             assert kill_signal == signal.SIGTERM
-            worker._status = Status.STOPPED
+            worker.stop()
 
         r, w = os.pipe()
         task = Task.create(wait, (w,), timeout=0.01)
@@ -153,7 +152,7 @@ class TestForkedWorker(object):
 
         def error_handler(task, kill_signal, exc_info):
             assert kill_signal == signal.SIGKILL
-            worker._status = Status.STOPPED
+            worker.stop()
 
         r, w = os.pipe()
         task = Task.create(wait, (w,), timeout=0.01)
@@ -275,7 +274,7 @@ class TestPreforkedWorker(object):
 
         def error_handler(task, kill_signal, exc_info):
             assert kill_signal == signal.SIGTERM
-            worker._status = Status.STOPPED
+            worker.stop()
 
         r, w = os.pipe()
         task = Task.create(wait, (w,), timeout=0.01)
@@ -292,7 +291,7 @@ class TestPreforkedWorker(object):
 
         def error_handler(task, kill_signal, exc_info):
             assert kill_signal == signal.SIGKILL
-            worker._status = Status.STOPPED
+            worker.stop()
 
         r, w = os.pipe()
         task = Task.create(wait, (w,), timeout=0.01)

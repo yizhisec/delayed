@@ -30,6 +30,9 @@ class Worker(object):
     def run(self):  # pragma: no cover
         raise NotImplementedError
 
+    def stop(self):
+        self._status = Status.STOPPING
+
     def _handler_success(self, task):
         try:
             self._success_handler(task)
@@ -57,7 +60,7 @@ class Worker(object):
 
     def _register_signals(self):
         def stop(signum, frame):
-            self._status = Status.STOPPING
+            self.stop()
         signal.signal(signal.SIGHUP, stop)
 
     def _unregister_signals(self):

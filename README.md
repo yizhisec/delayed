@@ -1,6 +1,6 @@
 # delayed
-[![Build status](https://travis-ci.org/keakon/delayed.svg?branch=master)](https://secure.travis-ci.org/keakon/delayed)
-[![Coverage](https://codecov.io/gh/keakon/delayed/branch/master/graph/badge.svg)](https://codecov.io/gh/keakon/delayed)
+[![Build status](https://travis-ci.org/yizhisec/delayed.svg?branch=master)](https://secure.travis-ci.org/yizhisec/delayed)
+[![Coverage](https://codecov.io/gh/yizhisec/delayed/branch/master/graph/badge.svg)](https://codecov.io/gh/yizhisec/delayed)
 
 Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org/).
 

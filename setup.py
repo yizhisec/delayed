@@ -14,7 +14,7 @@ setup(
     long_description_content_type='text/markdown',
     author='keakon',
     author_email='keakon@gmail.com',
-    url='https://github.com/keakon/delayed',
+    url='https://github.com/yizhisec/delayed',
     packages=find_packages(exclude=('tests',)),
     python_requires='>=2.7',
     install_requires=['hiredis', 'redis'],

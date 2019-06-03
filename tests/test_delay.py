@@ -8,8 +8,13 @@ DELAYED = delayed(QUEUE)
 DELAY_IN_TIME = delay_in_time(QUEUE)
 
 
-@DELAYED
+@DELAYED()
 def delayed_func(a, b):
+    return a + b
+
+
+@DELAYED(seconds=5)
+def delayed_func_in_time(a, b):
     return a + b
 
 
@@ -26,6 +31,20 @@ def test_delayed():
     QUEUE.release(task)
 
     delayed_func.timeout(10)(1, 2)
+    assert QUEUE.len() == 1
+    task = QUEUE.dequeue()
+    assert task.timeout == 10000
+    assert task.run() == 3
+    QUEUE.release(task)
+
+    delayed_func_in_time.delay(1, 2)
+    assert QUEUE.len() == 1
+    task = QUEUE.dequeue()
+    assert task.timeout == 5000
+    assert task.run() == 3
+    QUEUE.release(task)
+
+    delayed_func_in_time.timeout(10)(1, 2)
     assert QUEUE.len() == 1
     task = QUEUE.dequeue()
     assert task.timeout == 10000

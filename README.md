@@ -46,11 +46,11 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     * Define a task function and enqueue it:
 
         ```python
-        from delayed.delay import delay
+        from delayed.delay import delayed
 
-        delay = delay(queue)
+        delayed = delayed(queue)
         
-        @delay
+        @delayed()
         def delayed_add(a, b):
             return a + b
 
@@ -62,15 +62,15 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     * Directly enqueue a function:
 
         ```python
-        from delayed.delay import delayed
+        from delayed.delay import delay
 
-        delayed = delayed(queue)
+        delay = delay(queue)
 
         def add(a, b):
             return a + b
         
-        delayed(add)(1, 2)
-        delayed(add)(1, b=2)  # same as above
+        delay(add)(1, 2)
+        delay(add)(1, b=2)  # same as above
         ```
 
 5. Run a task worker (or more) in a separated process:

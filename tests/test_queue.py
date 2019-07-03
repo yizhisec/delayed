@@ -17,7 +17,7 @@ class TestQueue(object):
         assert CONN.llen(NOTI_KEY) == 1
         assert CONN.zcard(ENQUEUED_KEY) == 1
 
-        task2 = Task.create(func, (1, 2))
+        task2 = Task(None, 'tests.common', 'func', (1, 2))
         QUEUE.enqueue(task2)
         assert task2.id == task.id + 1
         assert CONN.llen(QUEUE_NAME) == 2

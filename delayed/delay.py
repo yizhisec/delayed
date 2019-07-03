@@ -4,15 +4,15 @@ from .task import Task
 
 
 def delayed(queue):
-    def wrapper(seconds=None):
+    def wrapper(timeout=None):
         def outer(func):
             def _delay(*args, **kwargs):
-                task = Task.create(func, args, kwargs, seconds)
+                task = Task.create(func, args, kwargs, timeout)
                 queue.enqueue(task)
 
-            def _timeout(_seconds):
+            def _timeout(timeout):
                 def inner(*args, **kwargs):
-                    task = Task.create(func, args, kwargs, _seconds)
+                    task = Task.create(func, args, kwargs, timeout)
                     queue.enqueue(task)
                 return inner
 

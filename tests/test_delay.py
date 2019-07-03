@@ -13,7 +13,7 @@ def delayed_func(a, b):
     return a + b
 
 
-@DELAYED(seconds=5)
+@DELAYED(timeout=5)
 def delayed_func_in_time(a, b):
     return a + b
 

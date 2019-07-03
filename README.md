@@ -41,7 +41,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     queue = Queue(name='default', conn=conn)
     ```
 
-4. Two ways to enqueue a task:
+4. Three ways to enqueue a task:
 
     * Define a task function and enqueue it:
 
@@ -49,7 +49,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         from delayed.delay import delayed
 
         delayed = delayed(queue)
-        
+
         @delayed()
         def delayed_add(a, b):
             return a + b
@@ -68,9 +68,17 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
         def add(a, b):
             return a + b
-        
+
         delay(add)(1, 2)
         delay(add)(1, b=2)  # same as above
+        ```
+    * Enqueue a predefined task function without importing it:
+    
+        ```python
+        from delayed.task import Task
+
+        task = Task(id=None, module_name='test', func_name='add', args=(1, 2))
+        queue.enqueue(task)
         ```
 
 5. Run a task worker (or more) in a separated process:
@@ -168,9 +176,9 @@ A: You can set the `default_timeout` of a queue or `timeout` of a task:
     from delayed.delay import delay_in_time
 
     queue = Queue('default', conn, default_timeout=60)
-    
+
     delayed_add.timeout(10)(1, 2)
-    
+
     delay_in_time = delay_in_time(queue)
     delay_in_time(add, timeout=10)(1, 2)
     ```
@@ -181,13 +189,13 @@ A: Set the `success_handler` and `error_handler` of the worker. The handlers wou
     ```python
     def success_handler(task):
         logging.info('task %d finished', task.id)
-        
+
     def error_handler(task, kill_signal, exc_info):
         if kill_signal:
             logging.error('task %d got killed by signal %d', task.id, kill_signal)
         else:
             logging.exception('task %d failed', exc_info=exc_info)
-            
+
     worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
     ```
 

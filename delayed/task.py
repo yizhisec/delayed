@@ -15,12 +15,12 @@ loads = pickle.loads
 class Task(object):
     __slots__ = ['_id', '_module_name', '_func_name', '_args', '_kwargs', '_timeout', '_data']
 
-    def __init__(self, id, module_name, func_name, args, kwargs, timeout):
+    def __init__(self, id, module_name, func_name, args=None, kwargs=None, timeout=None):
         self._id = id
         self._module_name = module_name
         self._func_name = func_name
-        self._args = args
-        self._kwargs = kwargs
+        self._args = () if args is None else args
+        self._kwargs = {} if kwargs is None else kwargs
         self._timeout = timeout
         self._data = None
 
@@ -59,10 +59,6 @@ class Task(object):
 
     @classmethod
     def create(cls, func, args=None, kwargs=None, timeout=None):
-        if args is None:
-            args = ()
-        if kwargs is None:
-            kwargs = {}
         if timeout:
             timeout = timeout * 1000
         return cls(None, func.__module__, func.__name__, args, kwargs, timeout)

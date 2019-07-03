@@ -67,6 +67,21 @@ _ID_KEY_SUFFIX = '_id'
 
 
 class Queue(object):
+    """Queue is the class of a task queue.
+
+    Args:
+        name (str): The task queue name.
+        conn (redis.Redis): A redis connection.
+        default_timeout (int or float): The default timeout in seconds of the task queue.
+            A task runs out of time will be killed.
+        requeue_timeout (int or float): The requeue timeout in seconds of the task queue.
+            Dequeued tasks which started more than `default_timeout` + `requeue_timeout` seconds
+            ago can be requeued by a sweeper.
+            It should be longer than `kill_timeout` of the `Worker`.
+        busy_len (int): The busy length of the task queue.
+            If the length of the queue reaches busy_len, it will ignore requeue_lost().
+    """
+
     def __init__(self, name, conn, default_timeout=600, requeue_timeout=10, busy_len=10):
         self._name = name
         self._enqueued_key = name + _ENQUEUED_KEY_SUFFIX
@@ -81,6 +96,11 @@ class Queue(object):
         self._requeue_script = conn.register_script(_REQUEUE_SCRIPT)
 
     def enqueue(self, task):
+        """Enqueues a task to the queue.
+
+        Args:
+            task (delayed.task.Task): The task to be enqueued.
+        """
         if task.id is None:
             task.id = self._conn.incr(self._id_key)
         data = task.serialize()
@@ -91,6 +111,11 @@ class Queue(object):
             pipe.execute()
 
     def dequeue(self):
+        """Dequeues a task from the queue.
+
+        Returns:
+            delayed.task.Task or None: The dequeued task, or None if the queue is empty.
+        """
         if self._conn.blpop(self._noti_key, 1):
             data = self._dequeue_script(
                 keys=(self._name, self._enqueued_key, self._dequeued_key),
@@ -99,6 +124,11 @@ class Queue(object):
                 return Task.deserialize(data)
 
     def requeue(self, task):
+        """Enqueues a dequeued task back to the queue.
+
+        Args:
+            task (delayed.task.Task): The task to be requeued.
+        """
         data = task.data
         if not data:
             return
@@ -109,18 +139,28 @@ class Queue(object):
             pipe.zrem(self._dequeued_key, data)
             pipe.execute()
 
-    def release(self, task):  # should call it after finishing the task
+    def release(self, task):
+        """Releases a dequeued task.
+         It should be called after finishing a task.
+
+        Args:
+            task (delayed.task.Task): The task to be release.
+        """
         with self._conn.pipeline() as pipe:
             pipe.zrem(self._enqueued_key, task.data)
             pipe.zrem(self._dequeued_key, task.data)
             pipe.execute()
 
     def len(self):
+        """Returns the length of the queue."""
         return self._conn.llen(self._name)
 
     def requeue_lost(self):
-        # should call it periodically to prevent losing tasks
-        # the lost tasks were those popped from the queue but not existed in the dequeued key
+        """Requeues lost tasks.
+        It should be called periodically to prevent losing tasks.
+        The lost tasks were those popped from the queue, but not existed in the dequeued key.
+        It won't requeue lost tasks if the queue is busy.
+        """
         return self._requeue_script(
             keys=(self._name, self._noti_key, self._dequeued_key),
             args=(current_timestamp(), self._busy_len))

@@ -4,6 +4,14 @@ from .task import Task
 
 
 def delayed(queue):
+    """A decorator for defining task functions.
+
+    Args:
+        queue (delayed.queue.Queue): The task queue.
+
+    Returns:
+        callable: A decorator.
+    """
     def wrapper(timeout=None):
         def outer(func):
             def _delay(*args, **kwargs):
@@ -24,6 +32,14 @@ def delayed(queue):
 
 
 def delay(queue):
+    """A decorator for defining task functions with default timeout.
+
+    Args:
+        queue (delayed.queue.Queue): The task queue.
+
+    Returns:
+        callable: A decorator.
+    """
     def wrapper(func):
         def _delay(*args, **kwargs):
             task = Task.create(func, args, kwargs)
@@ -33,6 +49,14 @@ def delay(queue):
 
 
 def delay_in_time(queue):
+    """A decorator for defining task functions with specified timeout.
+
+    Args:
+        queue (delayed.queue.Queue): The task queue.
+
+    Returns:
+        callable: A decorator.
+    """
     def wrapper(func, timeout):
         def _delay(*args, **kwargs):
             task = Task.create(func, args, kwargs, timeout)

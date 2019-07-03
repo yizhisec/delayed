@@ -117,8 +117,8 @@ A: It's the key used to store the tasks of the queue. A queue with name "default
     * default: list, enqueued tasks.
     * default_id: str, the next task id.
     * default_noti: list, the same length as enqueued tasks.
-    * default_enqueued: sorted set, enqueued tasks with their enqueued timestamp.
-    * default_dequeued: sorted set, dequeued tasks with their dequeued timestamp.
+    * default_enqueued: sorted set, enqueued tasks with their timeouts.
+    * default_dequeued: sorted set, dequeued tasks with their dequeued timestamps.
 
 3. **Q: Why the worker is slow?**  
 A: The `ForkedWorker` forks a new process for each new task. So all the tasks are isolated and you won't leak memory.  

@@ -18,6 +18,18 @@ _SIGNAL_MASK = 0xff
 
 
 class Worker(object):
+    """Worker is the abstract class of task worker.
+
+    Args:
+        queue (delayed.queue.Queue): The task queue of the worker.
+        kill_timeout (int or float): The kill timeout in seconds of the worker.
+            If a task runs out of time, the monitor will send SIGTERM signal to the worker.
+            If the worker not exited in `kill_timeout` seconds, the monitor will send SIGKILL
+            signal then.
+        success_handler (callable): The success callback.
+        error_handler (callable): The error callback.
+    """
+
     __slots__ = ['_queue', '_kill_timeout', '_success_handler', '_error_handler', '_status']
 
     def __init__(self, queue, kill_timeout=5, success_handler=None, error_handler=None):
@@ -28,46 +40,75 @@ class Worker(object):
         self._status = Status.STOPPED
 
     def run(self):  # pragma: no cover
+        """Runs the worker."""
         raise NotImplementedError
 
     def stop(self):
+        """Stops the worker."""
         self._status = Status.STOPPING
 
     def _handler_success(self, task):
+        """Calls the success handler.
+
+        Args:
+            task (delayed.task.Task): The success task.
+        """
         try:
             self._success_handler(task)
         except Exception:  # pragma: no cover
             logging.exception('handle success failed')
 
     def _handle_error(self, task, exit_status, exc_info):
+        """Calls the error handler.
+
+        Args:
+            task (delayed.task.Task): The error task.
+            exit_status (int or None): The exit status of the worker.
+            exc_info (type, Exception, traceback.Traceback): The exc_info if the worker raises an
+                uncaught exception.
+        """
         try:
             self._error_handler(task, exit_status, exc_info)
         except Exception:  # pragma: no cover
             logging.exception('handle error failed')
 
     def _requeue_task(self, task):
+        """Requeues a task.
+
+        Args:
+            task (delayed.task.Task): The task to be requeued.
+        """
         try:
             self._queue.requeue(task)
         except Exception:  # pragma: no cover
             logging.exception('requeue task %d failed', task.id)
 
     def _release_task(self, task):
-        # the task can be released twice by both the monitor and the worker
+        """Releases a task.
+        A task can be released twice by both the monitor and the worker.
+
+        Args:
+            task (delayed.task.Task): The task to be released.
+        """
         try:
             self._queue.release(task)
         except Exception:  # pragma: no cover
             logging.exception('release task %d failed', task.id)
 
     def _register_signals(self):
+        """Registers signal handlers."""
         def stop(signum, frame):
             self.stop()
         signal.signal(signal.SIGHUP, stop)
 
     def _unregister_signals(self):
+        """Unregisters signal handlers."""
         signal.signal(signal.SIGHUP, signal.SIG_DFL)
 
 
 class ForkedWorker(Worker):
+    """ForkedWorker forks a worker process for each task."""
+
     __slots__ = ['_waker', '_poll', '_child_pid']
 
     def run(self):
@@ -122,6 +163,12 @@ class ForkedWorker(Worker):
         super(ForkedWorker, self)._unregister_signals()
 
     def _monitor_task(self, task, pid):
+        """Monitors the task.
+
+        Args:
+            task (delayed.task.Task): The task to be monitored.
+            pid (int): The worker's pid.
+        """
         now = time.time()
         if task.timeout:
             deadline = now + task.timeout / 1000
@@ -168,6 +215,11 @@ class ForkedWorker(Worker):
         self._release_task(task)
 
     def _run_task(self, task):
+        """Runs a task.
+
+        Args:
+            task (delayed.task.Task): The task to be run.
+        """
         error_code = 1
         try:
             self._unregister_signals()
@@ -188,6 +240,11 @@ class ForkedWorker(Worker):
 
 
 class PreforkedWorker(Worker):
+    """PreforkedWorker forks a worker process and reuses it for each task.
+    If a task runs out of time, the forked worker process will be killed by the monitor, then a new
+    worker process will be forked for subsequent tasks.
+    """
+
     __slots__ = ['_waker', '_task_channel', '_result_channel', '_poll', '_child_pid']
 
     def run(self):
@@ -257,6 +314,12 @@ class PreforkedWorker(Worker):
         super(PreforkedWorker, self)._unregister_signals()
 
     def _monitor_task(self, task, pid):
+        """Monitors the task.
+
+        Args:
+            task (delayed.task.Task): The task to be monitored.
+            pid (int): The worker's pid.
+        """
         now = time.time()
         if task.timeout:
             deadline = now + task.timeout / 1000
@@ -321,6 +384,9 @@ class PreforkedWorker(Worker):
         self._release_task(task)
 
     def _run_tasks(self):
+        """Runs tasks.
+        The monitor sends the tasks to the worker through a pipe.
+        """
         error_code = 1
         try:
             task_reader, task_writer = self._task_channel

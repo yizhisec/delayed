@@ -10,15 +10,22 @@ _BUF_SIZE = 1024
 
 
 def ignore_signal(signum, frame):
+    """A no-op signal handler."""
     return
 
 
 def set_non_blocking(fd):
+    """Sets a file description as non-blocking."""
     flags = fcntl.fcntl(fd, fcntl.F_GETFL)
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
 
 def non_blocking_pipe():
+    """Creates a non-blocking pipe.
+
+    Returns:
+        (int, int): The non-blocking pipe.
+    """
     r, w = os.pipe()
     set_non_blocking(r)
     set_non_blocking(w)
@@ -26,6 +33,11 @@ def non_blocking_pipe():
 
 
 def drain_out(fd):
+    """Reads all the data from the file description.
+
+    Args:
+        fd (int): The file description to be read.
+    """
     while True:
         try:
             data = os.read(fd, _BUF_SIZE)
@@ -39,6 +51,14 @@ def drain_out(fd):
 
 
 def read_all(fd):
+    """Reads and returns all the data from the file description.
+
+    Args:
+        fd (int): The file description to be read.
+
+    Returns:
+        bytes: The data read from the file description.
+    """
     all_data = b''
     while True:
         try:
@@ -58,6 +78,12 @@ def read_all(fd):
 
 
 def write_all(fd, data):
+    """Writes all the data to the file description.
+
+    Args:
+        fd (int): The file description to be write to.
+        data (bytes): The data to be write.
+    """
     while data:
         try:
             length = os.write(fd, data)
@@ -68,6 +94,12 @@ def write_all(fd, data):
 
 
 def write_ignore(fd, data):
+    """Writes the data to the file description and ignores EPIPE.
+
+    Args:
+        fd (int): The file description to be write to.
+        data (bytes): The data to be write.
+    """
     while True:
         try:
             os.write(fd, data)
@@ -81,4 +113,9 @@ def write_ignore(fd, data):
 
 
 def current_timestamp():
+    """Gets the current timestamp in millisecond.
+
+    Returns:
+        int: Current timestamp.
+    """
     return int(time.time() * 1000)

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from .logger import logger
 from .task import Task
 from .utils import current_timestamp
 
@@ -103,12 +104,14 @@ class Queue(object):
         """
         if task.id is None:
             task.id = self._conn.incr(self._id_key)
+        logger.debug('Enqueuing task %d.', task.id)
         data = task.serialize()
         with self._conn.pipeline() as pipe:
             pipe.rpush(self._name, data)
             pipe.rpush(self._noti_key, '1')
             pipe.zadd(self._enqueued_key, {data: (task.timeout or self.default_timeout) + self._requeue_timeout})
             pipe.execute()
+        logger.debug('Enqueued task %d', task.id)
 
     def dequeue(self):
         """Dequeues a task from the queue.
@@ -117,11 +120,14 @@ class Queue(object):
             delayed.task.Task or None: The dequeued task, or None if the queue is empty.
         """
         if self._conn.blpop(self._noti_key, 1):
+            logger.debug('Popped a task.')
             data = self._dequeue_script(
                 keys=(self._name, self._enqueued_key, self._dequeued_key),
                 args=(current_timestamp(),))
             if data:
-                return Task.deserialize(data)
+                task = Task.deserialize(data)
+                logger.debug('Dequeued task %d.', task.id)
+                return task
 
     def requeue(self, task):
         """Enqueues a dequeued task back to the queue.
@@ -132,24 +138,28 @@ class Queue(object):
         data = task.data
         if not data:
             return
+        logger.debug('Requeuing task %d.', task.id)
         with self._conn.pipeline() as pipe:
             pipe.rpush(self._name, data)
             pipe.rpush(self._noti_key, '1')
             pipe.zadd(self._enqueued_key, {data: (task.timeout or self.default_timeout) + self._requeue_timeout})
             pipe.zrem(self._dequeued_key, data)
             pipe.execute()
+        logger.debug('Requeued task %d.', task.id)
 
     def release(self, task):
         """Releases a dequeued task.
-         It should be called after finishing a task.
+        It should be called after finishing a task.
 
         Args:
             task (delayed.task.Task): The task to be release.
         """
+        logger.debug('Releasing task %d.', task.id)
         with self._conn.pipeline() as pipe:
             pipe.zrem(self._enqueued_key, task.data)
             pipe.zrem(self._dequeued_key, task.data)
             pipe.execute()
+        logger.debug('Released task %d.', task.id)
 
     def len(self):
         """Returns the length of the queue."""
@@ -161,6 +171,12 @@ class Queue(object):
         The lost tasks were those popped from the queue, but not existed in the dequeued key.
         It won't requeue lost tasks if the queue is busy.
         """
-        return self._requeue_script(
+        count = self._requeue_script(
             keys=(self._name, self._noti_key, self._dequeued_key),
             args=(current_timestamp(), self._busy_len))
+        if count >= 1:
+            if count == 1:
+                logger.debug('Requeued 1 task.')
+            else:
+                logger.debug('Requeued %d tasks.', count)
+        return count

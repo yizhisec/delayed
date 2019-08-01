@@ -183,3 +183,16 @@ class TestQueue(object):
         task2 = queue.dequeue()
         assert task2 is not None
         queue.release(task2)
+
+        task5 = Task.create(func, (1, 2))
+        task6 = Task.create(func, (1, 2))
+        queue.enqueue(task5)
+        queue.enqueue(task6)
+        CONN.lpop(NOTI_KEY)
+        CONN.lpop(NOTI_KEY)
+        assert queue.requeue_lost() == 2
+
+        task5 = queue.dequeue()
+        queue.release(task5)
+        task6 = queue.dequeue()
+        queue.release(task6)

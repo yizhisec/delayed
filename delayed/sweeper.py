@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import logging
 import time
 
+from .logger import logger
 from .status import Status
 
 
@@ -23,16 +23,19 @@ class Sweeper(object):
     def run(self):
         """Runs the sweeper."""
         self._status = Status.RUNNING
+        logger.debug('Started a sweeper of queue %s.', self._queue._name)
 
         while self._status == Status.RUNNING:
             time.sleep(self._interval)
             try:
                 self._queue.requeue_lost()
             except Exception:  # pragma: no cover
-                logging.exception('requeue lost task failed')
+                logger.exception('Requeue lost tasks failed.')
 
         self._status = Status.STOPPED
+        logger.debug('Stopped the sweeper of queue %s.', self._queue._name)
 
     def stop(self):
         """Stops the sweeper."""
         self._status = Status.STOPPING
+        logger.debug('Stopping the sweeper of queue %s.', self._queue._name)

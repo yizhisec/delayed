@@ -7,6 +7,8 @@ except ImportError:  # pragma: no cover
 import functools
 from importlib import import_module
 
+from .logger import logger
+
 
 dumps = functools.partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
@@ -120,6 +122,7 @@ class Task(object):
         Returns:
             Any: The result of the task function.
         """
+        logger.debug('Running task %d.', self.id)
         module = import_module(self._module_name)
         func = getattr(module, self._func_name)
         return func(*self._args, **self._kwargs)

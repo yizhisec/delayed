@@ -429,6 +429,7 @@ class PreforkedWorker(Worker):
                 error_code = 1
                 try:
                     if poll.poll():
+                        logger.debug('The task channel became readable.')
                         task_data = read_all(task_reader)
                         if task_data:
                             try:
@@ -452,6 +453,7 @@ class PreforkedWorker(Worker):
                                 finally:
                                     self._release_task(task)
                         else:  # parent has exited or stopped
+                            logger.debug('Exiting child worker due to the parent has exited or stopped.')
                             os._exit(error_code)
                             return  # for unit test
                 except OSError as e:  # pragma: no cover

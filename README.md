@@ -169,7 +169,7 @@ A: Run a sweeper. It dose two things:
     * it keeps the task notification length the same as the task queue.
     * it moves the timeout dequeued tasks back to the task queue.
 
-8. **Q: How to set the timeout of tasks?**  
+9. **Q: How to set the timeout of tasks?**  
 A: You can set the `default_timeout` of a queue or `timeout` of a task:
 
     ```python
@@ -183,7 +183,7 @@ A: You can set the `default_timeout` of a queue or `timeout` of a task:
     delay_in_time(add, timeout=10)(1, 2)
     ```
 
-9. **Q: How to handle the finished tasks?**  
+10. **Q: How to handle the finished tasks?**  
 A: Set the `success_handler` and `error_handler` of the worker. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
@@ -199,10 +199,10 @@ A: Set the `success_handler` and `error_handler` of the worker. The handlers wou
     worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
     ```
 
-10. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
+11. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
 A: When the child process got killed after the `success_handler` be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful.
 
-11. **Q: How to turn on the debug logs?**  
+12. **Q: How to turn on the debug logs?**  
 A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
     ```python
     from delayed.logger import setup_logger

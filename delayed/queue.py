@@ -170,6 +170,9 @@ class Queue(object):
         It should be called periodically to prevent losing tasks.
         The lost tasks were those popped from the queue, but not existed in the dequeued key.
         It won't requeue lost tasks if the queue is busy.
+
+        Returns:
+            int: The requeued task count.
         """
         count = self._requeue_script(
             keys=(self._name, self._noti_key, self._dequeued_key),

@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from io import BytesIO
 import errno
 import fcntl
 import os
+import struct
 import time
 
 
@@ -77,8 +79,68 @@ def read_all(fd):
     return all_data
 
 
+def read1(fd, length=_BUF_SIZE):
+    while True:
+        try:
+            return os.read(fd, length)
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EINTR:
+                continue
+            if e.errno == errno.EAGAIN:  # it should be readable
+                return ''
+
+
+def read_task_data(fd):
+    head_data = read1(fd)
+    if not head_data or len(head_data) <= 4:
+        return ''
+
+    data_length = struct.unpack('=I', head_data[:4])
+    data = head_data[4:]
+    read_length = len(data)
+    if read_length == data_length:
+        return data
+
+    length = data_length - read_length
+    buf = BytesIO(data)
+    try:
+        while True:
+            try:
+                data = os.read(fd, length)
+                if data:
+                    buf.write(data)
+                    length -= len(data)
+                    if length == 0:
+                        break
+            except OSError as e:  # pragma: no cover
+                if e.errno == errno.EINTR:
+                    continue
+                if e.errno == errno.EAGAIN:
+                    break
+        return buf.getvalue()
+    finally:
+        buf.close()
+
+
+def read_bytes(fd, length, buf):
+    while True:
+        try:
+            data = os.read(fd, length)
+            if data:
+                buf.write(data)
+                length -= len(data)
+                if length == 0:
+                    return length
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EINTR:
+                continue
+            if e.errno == errno.EAGAIN:
+                return length
+
+
 def write_all(fd, data):
     """Writes all the data to the file description.
+    It may be blocked if the write buffer is full.
 
     Args:
         fd (int): The file description to be write to.
@@ -93,8 +155,33 @@ def write_all(fd, data):
                 continue
 
 
-def write_ignore(fd, data):
-    """Writes the data to the file description and ignores EPIPE.
+def try_write(fd, data):
+    """Tries to writes all the data to the file description.
+    If the fd is blocking, it may be blocked if the write buffer is full.
+    If the fd is non-blocking, it returns the rest data that cannot be written.
+
+    Args:
+        fd (int): The file description to be write to.
+        data (bytes): The data to be write.
+
+    Returns:
+        bytes: The rest data that cannot be written.
+    """
+    while data:
+        try:
+            length = os.write(fd, data)
+            data = data[length:]
+        except OSError as e:  # pragma: no cover
+            if e.errno == errno.EAGAIN:
+                return data
+            elif e.errno == errno.EINTR:
+                continue
+    return data
+
+
+def write_byte(fd, data):
+    """Writes a byte to the file description and ignores EPIPE.
+    It may be blocked if the write buffer is full.
 
     Args:
         fd (int): The file description to be write to.
@@ -102,14 +189,12 @@ def write_ignore(fd, data):
     """
     while True:
         try:
-            os.write(fd, data)
+            return os.write(fd, data)
         except OSError as e:  # pragma: no cover
             if e.errno == errno.EINTR:
                 continue
             if e.errno == errno.EPIPE:
-                break
-        else:
-            break
+                return 0
 
 
 def current_timestamp():

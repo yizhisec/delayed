@@ -165,18 +165,17 @@ def try_write(fd, data):
         data (bytes): The data to be write.
 
     Returns:
-        bytes: The rest data that cannot be written.
+        (bytes, int): The rest data that cannot be written and the error number.
     """
     while data:
         try:
             length = os.write(fd, data)
             data = data[length:]
-        except OSError as e:  # pragma: no cover
-            if e.errno == errno.EAGAIN:
-                return data
-            elif e.errno == errno.EINTR:
+        except OSError as e:
+            if e.errno == errno.EINTR:  # pragma: no cover
                 continue
-    return data
+            return data, e.errno
+    return data, 0
 
 
 def write_byte(fd, data):

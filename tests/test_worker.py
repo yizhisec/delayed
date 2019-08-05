@@ -2,6 +2,7 @@
 
 import os
 import signal
+import struct
 import threading
 import time
 
@@ -27,32 +28,18 @@ def wait(fd):
 
 class TestWorker(object):
     def test_requeue_task(self, monkeypatch):
-        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
-
-        pid = os.getpid()
-        _exit = os._exit
-        _close = os.close
-
-        def exit(n):
-            assert n == 1
+        def success_handler(task):
             os.kill(pid, signal.SIGHUP)
-            _exit(n)
 
-        def close(fd):
-            if os.getpid() == pid:
-                _close(fd)
-            else:
-                raise Exception('close error')
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+        pid = os.getpid()
 
-        monkeypatch.setattr(os, '_exit', exit)
-        monkeypatch.setattr(os, 'close', close)
-
-        worker = ForkedWorker(QUEUE)
+        worker = ForkedWorker(QUEUE, success_handler=success_handler)
         task = Task.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
 
-        worker = PreforkedWorker(QUEUE)
+        worker = PreforkedWorker(QUEUE, success_handler=success_handler)
         task = Task.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
@@ -214,7 +201,7 @@ class TestPreforkedWorker(object):
 
         def success_handler(task):
             os.write(w, TEST_STRING)
-            os.write(task_writer, task2.data)
+            os.write(task_writer, struct.pack('=I', len(task2.data)) + task2.data)
 
         def error_handler(task, kill_signal, exc_info):
             os.write(w, ERROR_STRING)
@@ -234,7 +221,7 @@ class TestPreforkedWorker(object):
         worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker._register_signals()
         task_writer = worker._task_channel[1]
-        os.write(task_writer, task1.data)
+        os.write(task_writer, struct.pack('=I', len(task1.data)) + task1.data)
         worker._run_tasks()
 
         assert os.read(r, 4) == TEST_STRING
@@ -266,7 +253,7 @@ class TestPreforkedWorker(object):
         worker = PreforkedWorker(QUEUE)
         worker._register_signals()
         task_writer = worker._task_channel[1]
-        os.write(task_writer, ERROR_STRING)
+        os.write(task_writer, struct.pack('=I', len(ERROR_STRING)) + ERROR_STRING)
         worker._run_tasks()
 
     def test_term_worker(self):

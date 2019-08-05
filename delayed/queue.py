@@ -14,9 +14,20 @@ local timeout = redis.call('zscore', KEYS[2], task)
 redis.call('zadd', KEYS[3], tonumber(ARGV[1]) + timeout, task)
 return task'''
 
+# KEYS: queue_name, noti_key, enqueued_key, dequeued_key
+# ARGV: task_data, timeout
+_REQUEUE_SCRIPT = '''local deleted = redis.call('zrem', KEYS[4], ARGV[1])
+if deleted == 0 then
+    return false
+end
+redis.call('zadd', KEYS[3], ARGV[2], ARGV[1])
+redis.call('rpush', KEYS[1], ARGV[1])
+redis.call('rpush', KEYS[2], '1')
+return true'''
+
 # KEYS: queue_name, noti_key, dequeued_key
 # ARGV: current_timestamp， busy_len
-_REQUEUE_SCRIPT = '''local queue_len = redis.call('llen', KEYS[1])
+_REQUEUE_LOST_SCRIPT = '''local queue_len = redis.call('llen', KEYS[1])
 local noti_len = redis.call('llen', KEYS[2])
 local count = queue_len - noti_len
 if count > 0 then
@@ -95,6 +106,7 @@ class Queue(object):
         self._busy_len = busy_len
         self._dequeue_script = conn.register_script(_DEQUEUE_SCRIPT)
         self._requeue_script = conn.register_script(_REQUEUE_SCRIPT)
+        self._requeue_lost_script = conn.register_script(_REQUEUE_LOST_SCRIPT)
 
     def enqueue(self, task):
         """Enqueues a task to the queue.
@@ -134,18 +146,22 @@ class Queue(object):
 
         Args:
             task (delayed.task.Task): The task to be requeued.
+
+        Returns:
+            bool: Whether the task has been requeued.
         """
         data = task.data
         if not data:
-            return
+            return False
         logger.debug('Requeuing task %d.', task.id)
-        with self._conn.pipeline() as pipe:
-            pipe.rpush(self._name, data)
-            pipe.rpush(self._noti_key, '1')
-            pipe.zadd(self._enqueued_key, {data: (task.timeout or self.default_timeout) + self._requeue_timeout})
-            pipe.zrem(self._dequeued_key, data)
-            pipe.execute()
-        logger.debug('Requeued task %d.', task.id)
+        requeued = self._requeue_script(
+            keys=(self._name, self._noti_key, self._enqueued_key, self._dequeued_key),
+            args=(data, (task.timeout or self.default_timeout) + self._requeue_timeout))
+        if requeued:
+            logger.debug('Requeued task %d.', task.id)
+        else:
+            logger.debug('Requeued task %d failed, the task was released or not dequeued.', task.id)
+        return requeued
 
     def release(self, task):
         """Releases a dequeued task.
@@ -174,7 +190,7 @@ class Queue(object):
         Returns:
             int: The requeued task count.
         """
-        count = self._requeue_script(
+        count = self._requeue_lost_script(
             keys=(self._name, self._noti_key, self._dequeued_key),
             args=(current_timestamp(), self._busy_len))
         if count >= 1:

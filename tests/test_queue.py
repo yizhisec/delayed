@@ -67,19 +67,22 @@ class TestQueue(object):
 
         task = Task.create(func, (1, 2))
         QUEUE.enqueue(task)
-        task = QUEUE.dequeue()
+        assert not QUEUE.requeue(task)
 
+        task = QUEUE.dequeue()
         data = task.data
         task._data = None
-        QUEUE.requeue(task)
+        assert not QUEUE.requeue(task)
         assert CONN.zcard(DEQUEUED_KEY) == 1
 
         task._data = data
-        QUEUE.requeue(task)
+        assert QUEUE.requeue(task)
         assert CONN.zcard(DEQUEUED_KEY) == 0
         task = QUEUE.dequeue()
         assert task is not None
         QUEUE.release(task)
+
+        assert not QUEUE.requeue(task)
 
     def test_release(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)

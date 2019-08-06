@@ -144,7 +144,7 @@ class ForkedWorker(Worker):
                             else:  # parent
                                 logger.debug('Forked a child worker %d.', pid)
                                 self._child_pid = pid
-                                self._monitor_task(task, pid)
+                                self._monitor_task(task)
                                 self._child_pid = None
         finally:
             self._unregister_signals()
@@ -168,12 +168,11 @@ class ForkedWorker(Worker):
         signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         super(ForkedWorker, self)._unregister_signals()
 
-    def _monitor_task(self, task, pid):
+    def _monitor_task(self, task):
         """Monitors the task.
 
         Args:
             task (delayed.task.Task): The task to be monitored.
-            pid (int): The worker's pid.
         """
         now = time.time()
         if task.timeout:
@@ -184,6 +183,8 @@ class ForkedWorker(Worker):
         r = self._waker[0]
         rlist = (r,)
         killing = False
+        pid = self._child_pid
+
         try:
             while True:
                 readable_fds, _, _ = select_ignore_eintr(rlist, (), (), 0.1)
@@ -282,7 +283,7 @@ class PreforkedWorker(Worker):
                                     os.close(self._task_channel[0])
                                     os.close(self._result_channel[1])
 
-                        self._monitor_task(task, self._child_pid)
+                        self._monitor_task(task)
 
                         if not self._child_pid:
                             os.close(self._task_channel[1])
@@ -311,12 +312,11 @@ class PreforkedWorker(Worker):
         signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         super(PreforkedWorker, self)._unregister_signals()
 
-    def _monitor_task(self, task, pid):
+    def _monitor_task(self, task):
         """Monitors the task.
 
         Args:
             task (delayed.task.Task): The task to be monitored.
-            pid (int): The child worker's pid.
         """
         now = time.time()
         if task.timeout:
@@ -328,9 +328,10 @@ class PreforkedWorker(Worker):
         waker_reader = self._waker[0]
         result_reader = self._result_channel[0]
         killing = False
+        pid = self._child_pid
 
-        if not self._send_task(task, pid, now, timeout):
-            self._rerun_task(task, pid)
+        if not self._send_task(task, now, timeout):
+            self._rerun_task(task)
             return
 
         rlist = (waker_reader, result_reader)
@@ -380,7 +381,7 @@ class PreforkedWorker(Worker):
 
         self._release_task(task)
 
-    def _send_task(self, task, pid, start_time, timeout):
+    def _send_task(self, task, start_time, timeout):
         task_writer = self._task_channel[1]
         data_len = len(task.data)
         data = struct.pack('=I', data_len) + task.data
@@ -398,25 +399,24 @@ class PreforkedWorker(Worker):
                         break
 
                     if error_no != errno.EAGAIN:
-                        logger.error('The task channel to worker %d is broken.', pid)
+                        logger.error('The task channel to worker %d is broken.', self._child_pid)
                         return False
 
                     # else not fully written, wait until writable
 
                 if time.time() > send_deadline:  # sending timeout, maybe the child worker is not working
-                    logger.error('Sending task to worker %d timeout.', pid)
+                    logger.error('Sending task to worker %d timeout.', self._child_pid)
                     return False
         return True
 
-    def _rerun_task(self, task, pid):
+    def _rerun_task(self, task):
         """Kills the child worker and requeues the task.
 
         Args:
             task (delayed.task.Task): The task to be rerun.
-            pid (int): The child worker's pid.
         """
-        os.kill(pid, signal.SIGKILL)
-        wait_pid_ignore_eintr(pid, 0)
+        os.kill(self._child_pid, signal.SIGKILL)
+        wait_pid_ignore_eintr(self._child_pid, 0)
         self._requeue_task(task)
 
     def _run_tasks(self):

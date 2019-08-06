@@ -288,7 +288,8 @@ class TestPreforkedWorker(object):
         if pid == 0:  # child worker
             worker._run_tasks()
         else:
-            assert worker._send_task(task, pid, time.time(), 10)
+            worker._child_pid = pid
+            assert worker._send_task(task, time.time(), 10)
             os.close(worker._result_channel[1])
             assert wait_pid_ignore_eintr(pid, 0) == (pid, 0)
             assert os.read(r, 4) == TEST_STRING
@@ -381,7 +382,8 @@ class TestPreforkedWorker(object):
 
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
-        assert not worker._send_task(task, pid, time.time(), 0.1)  # broken pipe
+        worker._child_pid = pid
+        assert not worker._send_task(task, time.time(), 0.1)  # broken pipe
         wait_pid_ignore_eintr(pid, 0)
 
         QUEUE.requeue(task)
@@ -401,7 +403,8 @@ class TestPreforkedWorker(object):
 
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
-        assert not worker._send_task(task, pid, 0, 0)  # time out
+        worker._child_pid = pid
+        assert not worker._send_task(task, 0, 0)  # time out
         wait_pid_ignore_eintr(pid, 0)
 
         os.close(worker._task_channel[1])
@@ -426,11 +429,12 @@ class TestPreforkedWorker(object):
         pid = os.fork()
         if pid == 0:  # sender
             rlist = (result_reader,)
-            worker._send_task(task1, p, time.time(), 10)
+            worker._child_pid = p
+            worker._send_task(task1, time.time(), 10)
             select_ignore_eintr(rlist, (), ())
             os.read(result_reader, 1)
 
-            worker._send_task(task2, p, time.time(), 10)
+            worker._send_task(task2, time.time(), 10)
             select_ignore_eintr(rlist, (), ())
             os.read(result_reader, 1)
 
@@ -476,7 +480,8 @@ class TestPreforkedWorker(object):
 
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
-        assert worker._monitor_task(task, pid) is None
+        worker._child_pid = pid
+        assert worker._monitor_task(task) is None
 
         os.close(worker._task_channel[1])
         os.close(worker._result_channel[0])

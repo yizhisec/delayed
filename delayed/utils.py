@@ -14,6 +14,7 @@ def ignore_signal(signum, frame):
 
 
 def select_ignore_eintr(rlist, wlist, xlist, timeout=None):
+    """It calls select.select() and ignores EINTR."""
     while True:
         try:
             return select.select(rlist, wlist, xlist, timeout)
@@ -23,6 +24,7 @@ def select_ignore_eintr(rlist, wlist, xlist, timeout=None):
 
 
 def wait_pid_ignore_eintr(pid, options):
+    """It calls os.waitpid() and ignores EINTR."""
     while True:
         try:
             return os.waitpid(pid, options)
@@ -32,7 +34,11 @@ def wait_pid_ignore_eintr(pid, options):
 
 
 def set_non_blocking(fd):
-    """Sets a file description as non-blocking."""
+    """Sets a file description as non-blocking.
+
+    Args:
+        fd (int): The file description to be set.
+    """
     flags = fcntl.fcntl(fd, fcntl.F_GETFL)
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
@@ -75,6 +81,15 @@ def drain_out(fd):
 
 
 def read1(fd, length=BUF_SIZE):
+    """Reads data from the file description with at most one call to the underlying os.read().
+
+    Args:
+        fd (int): The file description to be read.
+        length (int): The read buffer size.
+
+    Returns:
+        bytes: The read data.
+    """
     while True:
         try:
             return os.read(fd, length)
@@ -82,10 +97,20 @@ def read1(fd, length=BUF_SIZE):
             if e.errno == errno.EINTR:
                 continue
             if e.errno == errno.EAGAIN:  # it should be readable
-                return ''
+                return b''
 
 
 def read_bytes(fd, length, buf):
+    """Reads data from the file description into a buffer.
+
+    Args:
+        fd (int): The file description to be read.
+        length (int): The data length to be read.
+        buf (io.BytesIO): The read buffer.
+
+    Returns:
+        int: The rest data length.
+    """
     while True:
         try:
             data = os.read(fd, length)
@@ -133,6 +158,9 @@ def write_byte(fd, data):
     Args:
         fd (int): The file description to be write to.
         data (bytes): The data to be write.
+
+    Returns:
+        int: The written length.
     """
     while True:
         try:

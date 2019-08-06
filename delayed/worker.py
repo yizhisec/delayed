@@ -139,9 +139,9 @@ class ForkedWorker(Worker):
                             logger.exception('Fork task worker failed.')
                         else:
                             gc.enable()
-                            if pid == 0:  # child
+                            if pid == 0:  # child worker
                                 self._run_task(task)  # pragma: no cover
-                            else:  # parent
+                            else:  # monitor
                                 logger.debug('Forked a child worker %d.', pid)
                                 self._child_pid = pid
                                 self._monitor_task(task)
@@ -276,7 +276,7 @@ class PreforkedWorker(Worker):
                                 gc.enable()
                                 if pid == 0:  # child
                                     self._run_tasks()  # pragma: no cover
-                                else:  # parent
+                                else:  # monitor
                                     logger.debug('Forked a child worker %d.', pid)
                                     self._child_pid = pid
 
@@ -382,6 +382,16 @@ class PreforkedWorker(Worker):
         self._release_task(task)
 
     def _send_task(self, task, start_time, timeout):
+        """Sends a task to its child worker.
+
+        Args:
+            task (delayed.task.Task): The task to be monitored.
+            start_time (int or float): The start timestamp of the task.
+            timeout (int or float): The timeout in seconds of the task.
+
+        Returns:
+            bool: Whether the task has been sent successfully.
+        """
         task_writer = self._task_channel[1]
         data_len = len(task.data)
         data = struct.pack('=I', data_len) + task.data
@@ -410,7 +420,7 @@ class PreforkedWorker(Worker):
         return True
 
     def _rerun_task(self, task):
-        """Kills the child worker and requeues the task.
+        """Kills its child worker and requeues the task.
 
         Args:
             task (delayed.task.Task): The task to be rerun.
@@ -462,13 +472,18 @@ class PreforkedWorker(Worker):
                         written_bytes = write_byte(result_writer, b'0')
                     finally:
                         self._release_task(task)
-                if written_bytes == 0:  # cannot write to result_writer, parent maybe exited
+                if written_bytes == 0:  # cannot write to result_writer, the monitor maybe exited
                     logger.error('Write to result_writer failed.')
                     return
         finally:
             os._exit(1)
 
     def _recv_task(self):
+        """Receives a task from its monitor.
+
+        Returns:
+            bytes or None: The task data.
+        """
         task_reader = self._task_channel[0]
         result_writer = self._result_channel[1]
         rlist = (task_reader,)

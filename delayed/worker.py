@@ -320,42 +320,12 @@ class PreforkedWorker(Worker):
         signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         super(PreforkedWorker, self)._unregister_signals()
 
-    def _send_task(self, task, pid, now, timeout):
-        task_writer = self._task_channel[1]
-        data_len = len(task.data)
-        data = struct.pack('=I', data_len) + task.data
-        if len(data) <= _PIPE_SIZE:  # it won't be blocked
-            try_write(task_writer, data)
-        else:
-            send_timeout = timeout * 0.5  # assume the rest 50% time is not enough for the task
-            send_deadline = now + send_timeout
-            wlist = (task_writer,)
-            while True:
-                _, writable_fds, _ = select.select((), wlist, (), 0.1)
-                if writable_fds:
-                    data, error_no = try_write(task_writer, data)
-                    if error_no == 0:  # task has been fully written
-                        break
-
-                    if error_no != errno.EAGAIN:
-                        logger.error('The task channel to worker %d is broken.', pid)
-                        self._rerun_task(task, pid)
-                        return False
-
-                    # else not fully written, wait until writable
-
-                if time.time() > send_deadline:  # sending timeout, maybe the child worker is not working
-                    logger.error('Sending task to worker %d timeout.', pid)
-                    self._rerun_task(task, pid)
-                    return False
-        return True
-
     def _monitor_task(self, task, pid):
         """Monitors the task.
 
         Args:
             task (delayed.task.Task): The task to be monitored.
-            pid (int): The worker's pid.
+            pid (int): The child worker's pid.
         """
         now = time.time()
         if task.timeout:
@@ -369,6 +339,7 @@ class PreforkedWorker(Worker):
         killing = False
 
         if not self._send_task(task, pid, now, timeout):
+            self._rerun_task(task, pid)
             return
 
         rlist = (waker_reader, result_reader)
@@ -425,6 +396,34 @@ class PreforkedWorker(Worker):
 
         self._release_task(task)
 
+    def _send_task(self, task, pid, now, timeout):
+        task_writer = self._task_channel[1]
+        data_len = len(task.data)
+        data = struct.pack('=I', data_len) + task.data
+        if len(data) <= _PIPE_SIZE:  # it won't be blocked
+            try_write(task_writer, data)
+        else:
+            send_timeout = timeout * 0.5  # assume the rest 50% time is not enough for the task
+            send_deadline = now + send_timeout
+            wlist = (task_writer,)
+            while True:
+                _, writable_fds, _ = select.select((), wlist, (), 0.1)
+                if writable_fds:
+                    data, error_no = try_write(task_writer, data)
+                    if error_no == 0:  # task has been fully written
+                        break
+
+                    if error_no != errno.EAGAIN:
+                        logger.error('The task channel to worker %d is broken.', pid)
+                        return False
+
+                    # else not fully written, wait until writable
+
+                if time.time() > send_deadline:  # sending timeout, maybe the child worker is not working
+                    logger.error('Sending task to worker %d timeout.', pid)
+                    return False
+        return True
+
     def _rerun_task(self, task, pid):
         """Kills the child worker and requeues the task.
 
@@ -440,7 +439,6 @@ class PreforkedWorker(Worker):
         """Runs tasks.
         The monitor sends the tasks to the worker through a pipe.
         """
-        error_code = 1
         try:
             task_reader, task_writer = self._task_channel
             os.close(task_writer)
@@ -458,65 +456,34 @@ class PreforkedWorker(Worker):
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
             super(PreforkedWorker, self)._unregister_signals()
 
-            rlist = (task_reader,)
-
             while True:
-                error_code = 1
                 try:
-                    readable_fds, _, _ = select.select(rlist, (), (), 0.1)
-                    if readable_fds:
-                        logger.debug('The task channel became readable.')
-                        head_data = read1(task_reader)
-                        if not head_data or len(head_data) <= 4:
-                            logger.error('The task channel is broken.')
-                            write_byte(result_writer, b'1')
-                            os._exit(error_code)
-                            return
+                    task_data = self._recv_task(task_reader, result_writer)
+                    if not task_data:
+                        return
 
-                        data_length = struct.unpack('=I', head_data[:4])[0]
-                        task_data = head_data[4:]
-                        read_length = len(task_data)
-                        rest_length = data_length - read_length
-                        if rest_length:
-                            buf = BytesIO(task_data)
-                            while rest_length:
-                                readable_fds, _, _ = select.select(rlist, (), (), 0.1)
-                                if readable_fds:
-                                    logger.debug('The task channel became readable.')
-                                    read_length = read_bytes(task_reader, rest_length, buf)
-                                    if read_length == 0:
-                                        logger.error('The task channel is broken.')
-                                        write_byte(result_writer, b'1')
-                                        os._exit(error_code)
-                                        return
-                                    rest_length -= read_length
-                            task_data = buf.getvalue()
-                            buf.close()
-
+                    try:
+                        task = Task.deserialize(task_data)
+                    except Exception:
+                        logger.exception('Deserialize task failed.')
+                        written_bytes = write_byte(result_writer, b'1')
+                    else:
                         try:
-                            task = Task.deserialize(task_data)
+                            task.run()
                         except Exception:
-                            logger.exception('Deserialize task failed.')
+                            logger.exception('Run task %d failed.', task.id)
+                            if self._error_handler:
+                                self._error_handler(task, 0, sys.exc_info())
                             written_bytes = write_byte(result_writer, b'1')
                         else:
-                            error_code = 0
-                            try:
-                                task.run()
-                            except Exception:
-                                logger.exception('Run task %d failed.', task.id)
-                                if self._error_handler:
-                                    self._error_handler(task, 0, sys.exc_info())
-                                written_bytes = write_byte(result_writer, b'1')
-                            else:
-                                if self._success_handler:
-                                    self._handler_success(task)
-                                written_bytes = write_byte(result_writer, b'0')
-                            finally:
-                                self._release_task(task)
-                        if written_bytes == 0:  # cannot write to result_writer, parent maybe exited
-                            logger.error('Write to result_writer failed.')
-                            os._exit(error_code)
-                            return
+                            if self._success_handler:
+                                self._handler_success(task)
+                            written_bytes = write_byte(result_writer, b'0')
+                        finally:
+                            self._release_task(task)
+                    if written_bytes == 0:  # cannot write to result_writer, parent maybe exited
+                        logger.error('Write to result_writer failed.')
+                        return
                 except OSError as e:  # pragma: no cover
                     if e.errno != errno.EINTR:
                         raise
@@ -524,4 +491,34 @@ class PreforkedWorker(Worker):
                     if e.args[0] != errno.EINTR:
                         raise
         finally:
-            os._exit(error_code)
+            os._exit(1)
+
+    @staticmethod
+    def _recv_task(task_reader, result_writer):
+        rlist = (task_reader,)
+        select.select(rlist, (), ())
+        logger.debug('The task channel became readable.')
+        head_data = read1(task_reader)
+        if not head_data or len(head_data) <= 4:
+            logger.error('The task channel is broken.')
+            write_byte(result_writer, b'1')
+            return
+
+        data_length = struct.unpack('=I', head_data[:4])[0]
+        task_data = head_data[4:]
+        read_length = len(task_data)
+        rest_length = data_length - read_length
+        if rest_length:
+            buf = BytesIO(task_data)
+            while rest_length:
+                select.select(rlist, (), ())
+                logger.debug('The task channel became readable.')
+                read_length = read_bytes(task_reader, rest_length, buf)
+                if read_length == 0:
+                    logger.error('The task channel is broken.')
+                    write_byte(result_writer, b'1')
+                    return
+                rest_length -= read_length
+            task_data = buf.getvalue()
+            buf.close()
+        return task_data

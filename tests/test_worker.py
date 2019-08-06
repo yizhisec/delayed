@@ -27,7 +27,7 @@ def wait(fd):
 
 
 class TestWorker(object):
-    def test_requeue_task(self, monkeypatch):
+    def test_run(self, monkeypatch):
         def success_handler(task):
             os.kill(pid, signal.SIGHUP)
 

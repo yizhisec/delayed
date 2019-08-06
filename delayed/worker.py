@@ -4,7 +4,6 @@ import errno
 import gc
 from io import BytesIO
 import os
-import select
 import signal
 import struct
 import sys
@@ -13,7 +12,8 @@ import time
 from .logger import logger
 from .constants import BUF_SIZE, SIGNAL_MASK, Status
 from .task import Task
-from .utils import drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes, try_write, write_byte
+from .utils import (drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes,
+                    select_ignore_eintr, try_write, wait_pid_ignore_eintr, write_byte)
 
 
 class Worker(object):
@@ -186,26 +186,20 @@ class ForkedWorker(Worker):
         killing = False
         try:
             while True:
-                try:
-                    if select.select(rlist, (), (), 0.1):
-                        drain_out(r)
-                        p, exit_status = os.waitpid(pid, os.WNOHANG)
-                        if p != 0:
-                            if exit_status:
-                                kill_signal = exit_status & SIGNAL_MASK
-                                if kill_signal:
-                                    if self._error_handler:
-                                        self._handle_error(task, kill_signal, None)
-                                else:  # task hasn't been run
-                                    self._requeue_task(task)
-                                    return
-                            break
-                except OSError as e:  # pragma: no cover
-                    if e.errno != errno.EINTR:
-                        raise
-                except select.error as e:  # pragma: no cover
-                    if e.args[0] != errno.EINTR:
-                        raise
+                readable_fds, _, _ = select_ignore_eintr(rlist, (), (), 0.1)
+                if readable_fds:
+                    drain_out(r)
+                    p, exit_status = wait_pid_ignore_eintr(pid, os.WNOHANG)
+                    if p != 0:
+                        if exit_status:
+                            kill_signal = exit_status & SIGNAL_MASK
+                            if kill_signal:
+                                if self._error_handler:
+                                    self._handle_error(task, kill_signal, None)
+                            else:  # task hasn't been run
+                                self._requeue_task(task)
+                                return
+                        break
 
                 now = time.time()
                 if now >= deadline:
@@ -268,6 +262,9 @@ class PreforkedWorker(Worker):
                 else:
                     if task:
                         if not self._child_pid:
+                            self._task_channel = non_blocking_pipe()
+                            self._result_channel = non_blocking_pipe()
+
                             gc.disable()  # https://bugs.python.org/issue1336
                             try:
                                 pid = os.fork()
@@ -281,7 +278,15 @@ class PreforkedWorker(Worker):
                                 else:  # parent
                                     logger.debug('Forked a child worker %d.', pid)
                                     self._child_pid = pid
+
+                                    os.close(self._task_channel[0])
+                                    os.close(self._result_channel[1])
+
                         self._monitor_task(task, self._child_pid)
+
+                        if not self._child_pid:
+                            os.close(self._task_channel[1])
+                            os.close(self._result_channel[0])
         finally:
             self._unregister_signals()
             self._status = Status.STOPPED
@@ -292,8 +297,6 @@ class PreforkedWorker(Worker):
         signal.signal(signal.SIGCHLD, ignore_signal)
 
         self._waker = r, w = non_blocking_pipe()
-        self._task_channel = non_blocking_pipe()
-        self._result_channel = non_blocking_pipe()
         self._child_pid = None
 
         signal.set_wakeup_fd(w)
@@ -304,14 +307,6 @@ class PreforkedWorker(Worker):
         os.close(self._waker[0])
         os.close(self._waker[1])
         del self._waker
-
-        os.close(self._task_channel[0])
-        os.close(self._task_channel[1])
-        del self._task_channel
-
-        os.close(self._result_channel[0])
-        os.close(self._result_channel[1])
-        del self._result_channel
 
         signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         super(PreforkedWorker, self)._unregister_signals()
@@ -341,42 +336,35 @@ class PreforkedWorker(Worker):
         rlist = (waker_reader, result_reader)
         try:
             while True:
-                try:
-                    readable_fds, _, _ = select.select(rlist, (), (), 0.1)
-                    if readable_fds:
-                        done = False
+                readable_fds, _, _ = select_ignore_eintr(rlist, (), (), 0.1)
+                if readable_fds:
+                    done = False
 
-                        for fd in readable_fds:
-                            if fd == waker_reader:  # catch a signal (maybe SIGCHLD)
-                                drain_out(waker_reader)
-                                p, exit_status = os.waitpid(pid, os.WNOHANG)
-                                if p != 0:  # child has exited
-                                    logger.warning('The child worker %d has exited.', p)
-                                    self._child_pid = None
-                                    if exit_status:
-                                        kill_signal = exit_status & SIGNAL_MASK
-                                        if kill_signal:
-                                            if self._error_handler:
-                                                self._handle_error(task, kill_signal, None)
-                                        else:  # task hasn't been run
-                                            self._requeue_task(task)
-                                            return
-                                    done = True
-                                    break
-                            else:  # fd == result_reader, task has finished
-                                if drain_out(fd):  # task has finished
-                                    done = True
-                                    break
-                                # else child has exited abnormally
+                    for fd in readable_fds:
+                        if fd == waker_reader:  # catch a signal (maybe SIGCHLD)
+                            drain_out(waker_reader)
+                            p, exit_status = wait_pid_ignore_eintr(pid, os.WNOHANG)
+                            if p != 0:  # child has exited
+                                logger.warning('The child worker %d has exited.', p)
+                                self._child_pid = None
+                                if exit_status:
+                                    kill_signal = exit_status & SIGNAL_MASK
+                                    if kill_signal:
+                                        if self._error_handler:
+                                            self._handle_error(task, kill_signal, None)
+                                    else:  # task hasn't been run
+                                        self._requeue_task(task)
+                                        return
+                                done = True
+                                break
+                        else:  # fd == result_reader, task has finished
+                            if drain_out(fd):  # task has finished
+                                done = True
+                                break
+                            # else child has exited abnormally
 
-                        if done:
-                            break
-                except OSError as e:  # pragma: no cover
-                    if e.errno != errno.EINTR:
-                        raise
-                except select.error as e:  # pragma: no cover
-                    if e.args[0] != errno.EINTR:
-                        raise
+                    if done:
+                        break
 
                 now = time.time()
                 if now >= deadline:
@@ -392,7 +380,7 @@ class PreforkedWorker(Worker):
 
         self._release_task(task)
 
-    def _send_task(self, task, pid, now, timeout):
+    def _send_task(self, task, pid, start_time, timeout):
         task_writer = self._task_channel[1]
         data_len = len(task.data)
         data = struct.pack('=I', data_len) + task.data
@@ -400,10 +388,10 @@ class PreforkedWorker(Worker):
             try_write(task_writer, data)
         else:
             send_timeout = timeout * 0.5  # assume the rest 50% time is not enough for the task
-            send_deadline = now + send_timeout
+            send_deadline = start_time + send_timeout
             wlist = (task_writer,)
             while True:
-                _, writable_fds, _ = select.select((), wlist, (), 0.1)
+                _, writable_fds, _ = select_ignore_eintr((), wlist, (), 0.1)
                 if writable_fds:
                     data, error_no = try_write(task_writer, data)
                     if error_no == 0:  # task has been fully written
@@ -428,7 +416,7 @@ class PreforkedWorker(Worker):
             pid (int): The child worker's pid.
         """
         os.kill(pid, signal.SIGKILL)
-        os.waitpid(pid, 0)
+        wait_pid_ignore_eintr(pid, 0)
         self._requeue_task(task)
 
     def _run_tasks(self):
@@ -451,39 +439,32 @@ class PreforkedWorker(Worker):
             super(PreforkedWorker, self)._unregister_signals()
 
             while True:
-                try:
-                    task_data = self._recv_task()
-                    if not task_data:
-                        return
+                task_data = self._recv_task()
+                if not task_data:
+                    return
 
+                try:
+                    task = Task.deserialize(task_data)
+                except Exception:
+                    logger.exception('Deserialize task failed.')
+                    written_bytes = write_byte(result_writer, b'1')
+                else:
                     try:
-                        task = Task.deserialize(task_data)
+                        task.run()
                     except Exception:
-                        logger.exception('Deserialize task failed.')
+                        logger.exception('Run task %d failed.', task.id)
+                        if self._error_handler:
+                            self._error_handler(task, 0, sys.exc_info())
                         written_bytes = write_byte(result_writer, b'1')
                     else:
-                        try:
-                            task.run()
-                        except Exception:
-                            logger.exception('Run task %d failed.', task.id)
-                            if self._error_handler:
-                                self._error_handler(task, 0, sys.exc_info())
-                            written_bytes = write_byte(result_writer, b'1')
-                        else:
-                            if self._success_handler:
-                                self._handler_success(task)
-                            written_bytes = write_byte(result_writer, b'0')
-                        finally:
-                            self._release_task(task)
-                    if written_bytes == 0:  # cannot write to result_writer, parent maybe exited
-                        logger.error('Write to result_writer failed.')
-                        return
-                except OSError as e:  # pragma: no cover
-                    if e.errno != errno.EINTR:
-                        raise
-                except select.error as e:  # pragma: no cover
-                    if e.args[0] != errno.EINTR:
-                        raise
+                        if self._success_handler:
+                            self._handler_success(task)
+                        written_bytes = write_byte(result_writer, b'0')
+                    finally:
+                        self._release_task(task)
+                if written_bytes == 0:  # cannot write to result_writer, parent maybe exited
+                    logger.error('Write to result_writer failed.')
+                    return
         finally:
             os._exit(1)
 
@@ -492,7 +473,7 @@ class PreforkedWorker(Worker):
         result_writer = self._result_channel[1]
         rlist = (task_reader,)
 
-        select.select(rlist, (), ())
+        select_ignore_eintr(rlist, (), ())
         logger.debug('The task channel became readable.')
 
         head_data = read1(task_reader)
@@ -509,7 +490,7 @@ class PreforkedWorker(Worker):
             buf = BytesIO(task_data)
             buf.seek(0, os.SEEK_END)
             while rest_length:
-                select.select(rlist, (), ())
+                select_ignore_eintr(rlist, (), ())
                 logger.debug('The task channel became readable.')
                 length = read_bytes(task_reader, rest_length, buf)
                 if length == 0:

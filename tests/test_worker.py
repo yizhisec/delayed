@@ -9,6 +9,7 @@ import time
 
 from delayed.constants import BUF_SIZE
 from delayed.task import Task
+from delayed.utils import non_blocking_pipe, select_ignore_eintr, try_write, wait_pid_ignore_eintr
 from delayed.worker import ForkedWorker, PreforkedWorker
 
 from .common import CONN, DELAY, DEQUEUED_KEY, ENQUEUED_KEY, func, NOTI_KEY, QUEUE, QUEUE_NAME
@@ -42,6 +43,39 @@ class TestWorker(object):
         worker.run()
 
         worker = PreforkedWorker(QUEUE, success_handler=success_handler)
+        task = Task.create(func, (1, 2))
+        QUEUE.enqueue(task)
+        worker.run()
+
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_requeue_task(self, monkeypatch):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        pid = os.getpid()
+        _exit = os._exit
+        _close = os.close
+
+        def exit(n):
+            assert n == 1  # the parent worker will requeue task if its child's exit code is 1
+            os.kill(pid, signal.SIGHUP)
+            _exit(n)
+
+        def close(fd):
+            if os.getpid() == pid:
+                _close(fd)
+            else:
+                raise Exception('close error')
+
+        monkeypatch.setattr(os, '_exit', exit)
+        monkeypatch.setattr(os, 'close', close)
+
+        worker = ForkedWorker(QUEUE)
+        task = Task.create(func, (1, 2))
+        QUEUE.enqueue(task)
+        worker.run()
+
+        worker = PreforkedWorker(QUEUE)
         task = Task.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
@@ -173,7 +207,7 @@ class TestPreforkedWorker(object):
         pid = os.getpid()
         r, w = os.pipe()
         for _ in range(2):
-            task = Task.create(os.write, (w, TEST_STRING), timeout=10)
+            task = Task.create(os.write, (w, TEST_STRING), timeout=100)
             QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker.run()
@@ -222,7 +256,8 @@ class TestPreforkedWorker(object):
 
         worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker._register_signals()
-        task_writer = worker._task_channel[1]
+        worker._task_channel = _, task_writer = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
         os.write(task_writer, struct.pack('=I', len(task1.data)) + task1.data)
         worker._run_tasks()
 
@@ -231,6 +266,8 @@ class TestPreforkedWorker(object):
 
         close(r)
         close(w)
+        close(worker._task_channel[0])
+        close(worker._result_channel[1])
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks_with_large_size(self):
@@ -244,26 +281,25 @@ class TestPreforkedWorker(object):
         QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, success_handler=success_handler)
         worker._register_signals()
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
         pid = os.fork()
         if pid == 0:  # child worker
             worker._run_tasks()
         else:
             assert worker._send_task(task, pid, time.time(), 10)
             os.close(worker._result_channel[1])
-            while True:
-                try:
-                    assert os.waitpid(pid, 0) == (pid, 0)
-                except OSError as e:
-                    if e.errno == errno.EINTR:
-                        continue
-                else:
-                    break
-
+            assert wait_pid_ignore_eintr(pid, 0) == (pid, 0)
             assert os.read(r, 4) == TEST_STRING
 
             os.close(r)
             os.close(w)
 
+            os.close(worker._task_channel[0])
+            os.close(worker._task_channel[1])
+            os.close(worker._result_channel[0])
+            worker._unregister_signals()
             CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks_with_deserialize_error(self, monkeypatch):
@@ -287,9 +323,14 @@ class TestPreforkedWorker(object):
 
         worker = PreforkedWorker(QUEUE)
         worker._register_signals()
-        task_writer = worker._task_channel[1]
-        os.write(task_writer, struct.pack('=I', len(ERROR_STRING)) + ERROR_STRING)
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+        os.write(worker._task_channel[1], struct.pack('=I', len(ERROR_STRING)) + ERROR_STRING)
         worker._run_tasks()
+
+        os.close(worker._task_channel[0])
+        os.close(worker._result_channel[1])
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_term_worker(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
@@ -322,4 +363,122 @@ class TestPreforkedWorker(object):
         worker.run()
 
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_send_task_failed(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        task = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
+        QUEUE.enqueue(task)
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
+        pid = os.fork()
+        if pid == 0:  # child worker
+            os._exit(0)
+
+        os.close(worker._task_channel[0])
+        os.close(worker._result_channel[1])
+        assert not worker._send_task(task, pid, time.time(), 0.1)  # broken pipe
+        wait_pid_ignore_eintr(pid, 0)
+
+        QUEUE.requeue(task)
+        os.close(worker._task_channel[1])
+        os.close(worker._result_channel[0])
+        worker._unregister_signals()
+
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
+        pid = os.fork()
+        if pid == 0:  # child worker
+            time.sleep(0.2)
+            os._exit(0)
+
+        os.close(worker._task_channel[0])
+        os.close(worker._result_channel[1])
+        assert not worker._send_task(task, pid, 0, 0)  # time out
+        wait_pid_ignore_eintr(pid, 0)
+
+        os.close(worker._task_channel[1])
+        os.close(worker._result_channel[0])
+        worker._unregister_signals()
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_recv_task(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        task1 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task1)
+        task2 = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
+        QUEUE.enqueue(task2)
+
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        worker._task_channel = task_reader, task_writer = non_blocking_pipe()
+        worker._result_channel = result_reader, result_writer = non_blocking_pipe()
+
+        p = os.getpid()
+        pid = os.fork()
+        if pid == 0:  # sender
+            rlist = (result_reader,)
+            worker._send_task(task1, p, time.time(), 10)
+            select_ignore_eintr(rlist, (), ())
+            os.read(result_reader, 1)
+
+            worker._send_task(task2, p, time.time(), 10)
+            select_ignore_eintr(rlist, (), ())
+            os.read(result_reader, 1)
+
+            data_len = BUF_SIZE * 2
+            data = struct.pack('=I', data_len) + '1' * data_len
+            data, error_no = try_write(task_writer, data)
+            assert error_no == errno.EAGAIN
+
+            wlist = (task_writer,)
+            select_ignore_eintr((), wlist, ())
+            data, error_no = try_write(task_writer, data)
+            assert error_no == errno.EAGAIN
+            os._exit(0)
+
+        os.close(task_writer)
+        os.close(result_reader)
+
+        assert worker._recv_task() == task1.data
+        os.write(result_writer, '0')
+        assert worker._recv_task() == task2.data
+        os.write(result_writer, '0')
+        assert worker._recv_task() is None
+
+        os.close(task_reader)
+        os.close(result_writer)
+        worker._unregister_signals()
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_monitor_task(self):
+        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        task = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE), timeout=0.1)
+        QUEUE.enqueue(task)
+
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
+        pid = os.fork()
+        if pid == 0:  # child worker
+            os._exit(0)
+
+        os.close(worker._task_channel[0])
+        os.close(worker._result_channel[1])
+        assert worker._monitor_task(task, pid) is None
+
+        os.close(worker._task_channel[1])
+        os.close(worker._result_channel[0])
+        worker._unregister_signals()
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)

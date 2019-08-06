@@ -4,12 +4,31 @@ from constants import BUF_SIZE
 import errno
 import fcntl
 import os
+import select
 import time
 
 
 def ignore_signal(signum, frame):
     """A no-op signal handler."""
     return
+
+
+def select_ignore_eintr(rlist, wlist, xlist, timeout=None):
+    while True:
+        try:
+            return select.select(rlist, wlist, xlist, timeout)
+        except select.error as e:
+            if e.args[0] != errno.EINTR:  # pragma: no cover
+                raise
+
+
+def wait_pid_ignore_eintr(pid, options):
+    while True:
+        try:
+            return os.waitpid(pid, options)
+        except OSError as e:
+            if e.errno != errno.EINTR:  # pragma: no cover
+                raise
 
 
 def set_non_blocking(fd):
@@ -75,6 +94,8 @@ def read_bytes(fd, length, buf):
                 length -= len(data)
                 if length == 0:
                     return length
+            else:
+                return length
         except OSError as e:  # pragma: no cover
             if e.errno == errno.EINTR:
                 continue

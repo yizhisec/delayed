@@ -11,13 +11,9 @@ import sys
 import time
 
 from .logger import logger
-from .status import Status
+from .constants import BUF_SIZE, SIGNAL_MASK, Status
 from .task import Task
-from .utils import drain_out, ignore_signal, non_blocking_pipe, read1, read_all, read_bytes, try_write, write_byte
-
-
-_SIGNAL_MASK = 0xff
-_PIPE_SIZE = 65536
+from .utils import drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes, try_write, write_byte
 
 
 class Worker(object):
@@ -196,7 +192,7 @@ class ForkedWorker(Worker):
                         p, exit_status = os.waitpid(pid, os.WNOHANG)
                         if p != 0:
                             if exit_status:
-                                kill_signal = exit_status & _SIGNAL_MASK
+                                kill_signal = exit_status & SIGNAL_MASK
                                 if kill_signal:
                                     if self._error_handler:
                                         self._handle_error(task, kill_signal, None)
@@ -358,7 +354,7 @@ class PreforkedWorker(Worker):
                                     logger.warning('The child worker %d has exited.', p)
                                     self._child_pid = None
                                     if exit_status:
-                                        kill_signal = exit_status & _SIGNAL_MASK
+                                        kill_signal = exit_status & SIGNAL_MASK
                                         if kill_signal:
                                             if self._error_handler:
                                                 self._handle_error(task, kill_signal, None)
@@ -367,11 +363,11 @@ class PreforkedWorker(Worker):
                                             return
                                     done = True
                                     break
-                            else:  # task has finished or child has exited
-                                if read_all(fd):  # task has finished
+                            else:  # fd == result_reader, task has finished
+                                if drain_out(fd):  # task has finished
                                     done = True
                                     break
-                                # else child has exited
+                                # else child has exited abnormally
 
                         if done:
                             break
@@ -400,7 +396,7 @@ class PreforkedWorker(Worker):
         task_writer = self._task_channel[1]
         data_len = len(task.data)
         data = struct.pack('=I', data_len) + task.data
-        if len(data) <= _PIPE_SIZE:  # it won't be blocked
+        if len(data) <= BUF_SIZE:  # it won't be blocked
             try_write(task_writer, data)
         else:
             send_timeout = timeout * 0.5  # assume the rest 50% time is not enough for the task
@@ -442,11 +438,9 @@ class PreforkedWorker(Worker):
         try:
             task_reader, task_writer = self._task_channel
             os.close(task_writer)
-            del self._task_channel
 
             result_reader, result_writer = self._result_channel
             os.close(result_reader)
-            del self._result_channel
 
             signal.set_wakeup_fd(-1)
             os.close(self._waker[0])
@@ -458,7 +452,7 @@ class PreforkedWorker(Worker):
 
             while True:
                 try:
-                    task_data = self._recv_task(task_reader, result_writer)
+                    task_data = self._recv_task()
                     if not task_data:
                         return
 
@@ -493,11 +487,14 @@ class PreforkedWorker(Worker):
         finally:
             os._exit(1)
 
-    @staticmethod
-    def _recv_task(task_reader, result_writer):
+    def _recv_task(self):
+        task_reader = self._task_channel[0]
+        result_writer = self._result_channel[1]
         rlist = (task_reader,)
+
         select.select(rlist, (), ())
         logger.debug('The task channel became readable.')
+
         head_data = read1(task_reader)
         if not head_data or len(head_data) <= 4:
             logger.error('The task channel is broken.')
@@ -510,15 +507,18 @@ class PreforkedWorker(Worker):
         rest_length = data_length - read_length
         if rest_length:
             buf = BytesIO(task_data)
+            buf.seek(0, os.SEEK_END)
             while rest_length:
                 select.select(rlist, (), ())
                 logger.debug('The task channel became readable.')
-                read_length = read_bytes(task_reader, rest_length, buf)
-                if read_length == 0:
+                length = read_bytes(task_reader, rest_length, buf)
+                if length == 0:
+                    break
+                if length == rest_length:
                     logger.error('The task channel is broken.')
                     write_byte(result_writer, b'1')
                     return
-                rest_length -= read_length
+                rest_length = length
             task_data = buf.getvalue()
             buf.close()
         return task_data

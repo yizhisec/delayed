@@ -4,6 +4,7 @@ from .logger import logger
 from .task import Task
 from .utils import current_timestamp
 
+
 # KEYS: queue_name, enqueued_key, dequeued_key
 # ARGV: current_timestamp
 _DEQUEUE_SCRIPT = '''local task = redis.call('lpop', KEYS[1])

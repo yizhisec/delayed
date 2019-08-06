@@ -2,8 +2,8 @@
 
 import time
 
+from .constants import Status
 from .logger import logger
-from .status import Status
 
 
 class Sweeper(object):

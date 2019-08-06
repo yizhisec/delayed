@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
+import errno
 import os
 import signal
 import struct
 import threading
 import time
 
+from delayed.constants import BUF_SIZE
 from delayed.task import Task
 from delayed.worker import ForkedWorker, PreforkedWorker
 
@@ -230,6 +232,39 @@ class TestPreforkedWorker(object):
         close(r)
         close(w)
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+    def test_run_tasks_with_large_size(self):
+        r, w = os.pipe()
+
+        def success_handler(task):
+            os.write(w, TEST_STRING)
+            os._exit(0)
+
+        task = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
+        QUEUE.enqueue(task)
+        worker = PreforkedWorker(QUEUE, success_handler=success_handler)
+        worker._register_signals()
+        pid = os.fork()
+        if pid == 0:  # child worker
+            worker._run_tasks()
+        else:
+            assert worker._send_task(task, pid, time.time(), 10)
+            os.close(worker._result_channel[1])
+            while True:
+                try:
+                    assert os.waitpid(pid, 0) == (pid, 0)
+                except OSError as e:
+                    if e.errno == errno.EINTR:
+                        continue
+                else:
+                    break
+
+            assert os.read(r, 4) == TEST_STRING
+
+            os.close(r)
+            os.close(w)
+
+            CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks_with_deserialize_error(self, monkeypatch):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)

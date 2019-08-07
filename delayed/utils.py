@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from constants import BUF_SIZE
+from .constants import BUF_SIZE
 import errno
 import fcntl
 import os

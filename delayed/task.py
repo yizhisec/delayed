@@ -4,14 +4,42 @@ try:
     import cPickle as pickle
 except ImportError:  # pragma: no cover
     import pickle
-import functools
 from importlib import import_module
 
 from .logger import logger
 
 
-dumps = functools.partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+PICKLE_PROTOCOL_VERSION = pickle.HIGHEST_PROTOCOL
 loads = pickle.loads
+
+
+def dumps(obj):
+    return pickle.dumps(obj, PICKLE_PROTOCOL_VERSION)
+
+
+def set_pickle_protocol_version(version):
+    """Set pickle protocol version for serializing and deserializing tasks.
+    The default version is pickle.HIGHEST_PROTOCOL.
+    You can set it to a lower version for compatibility.
+
+    Args:
+        version (int): The pickle protocol version to be set.
+    """
+    global PICKLE_PROTOCOL_VERSION
+
+    if version > pickle.HIGHEST_PROTOCOL:
+        raise ValueError('Unsupported pickle protocol version for current Python runtime')
+    PICKLE_PROTOCOL_VERSION = version
+
+
+def get_pickle_protocol_version():
+    """Get the current pickle protocol version.
+
+
+    Returns:
+        int: The current pickle protocol version.
+    """
+    return PICKLE_PROTOCOL_VERSION
 
 
 class Task(object):

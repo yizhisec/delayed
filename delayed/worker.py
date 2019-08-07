@@ -396,7 +396,17 @@ class PreforkedWorker(Worker):
         data_len = len(task.data)
         data = struct.pack('=I', data_len) + task.data
         if len(data) <= BUF_SIZE:  # it won't be blocked
-            try_write(task_writer, data)
+            error_no = try_write(task_writer, data)[1]
+            if error_no:
+                if error_no == errno.EAGAIN:  # pragma: no cover
+                    logger.warning(
+                        'The task channel is busy, '
+                        'please make sure your pipe capacity is at lease %d bytes.',
+                        BUF_SIZE
+                    )
+                else:
+                    logger.error('The task channel to worker %d is broken.', self._child_pid)
+                return False
         else:
             send_timeout = timeout * 0.5  # assume the rest 50% time is not enough for the task
             send_deadline = start_time + send_timeout

@@ -12,7 +12,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## Requirements
 
-1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5. All the processes of a task queue should use the same version of Python. 
+1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5.
 2. UNIX-like systems (with os.fork() implemented, pipe capacity at least 65536 bytes), tested on Ubuntu and macOS.
 3. Redis 2.6.0 or later.
 4. Keep syncing time among all the machines of a task queue.
@@ -210,5 +210,27 @@ A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest 
     setup_logger()
     ```
 
-13. **Q: Why not use JSON or MessagePack to serialize tasks?**  
-A: These serializations may confuse some types (eg: bytes / str, list / tuple).
+13. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
+A: `delayed` uses the `pickle` module to serialize and deserialize tasks.
+If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtime, you can use it without any configurations.
+Otherwise you have to choose the lowest `pickle.HIGHEST_PROTOCOL` of all your Python runtime as the pickle protocol.
+eg: If you want to enqueue a task in Python 3.7 and dequeue it in Python 2.7. Their `pickle.HIGHEST_PROTOCOL` are `4` and `2`, so you need to set the version to `2`:
+    ```python
+    from delayed.task import set_pickle_protocol_version
+
+    set_pickle_protocol_version(2)
+    ```
+
+14. **Q: Why not use JSON or MessagePack to serialize tasks?**  
+A: These serializations may confuse some types (eg: `bytes` / `str`, `list` / `tuple`).
+
+15. **Q: What will happen if I changed the pipe capacity?**  
+A: `delayed` assumes the pipe capacity is 65536 bytes (the default value on Linux and macOS).
+To reduce syscalls, it won't check whether the pipe is writable if the length of data to be written is less than 65536.
+If your system has a lower pipe capacity, the `PreforkedWorker` may not working well for some large task.
+To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
+    ```python
+    import delayed.constants
+
+    delayed.constants.BUF_SIZE = 1024
+    ```

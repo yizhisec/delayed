@@ -367,10 +367,11 @@ class TestPreforkedWorker(object):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_send_task_failed(self):
-        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+        task1 = Task.create(func, (1, 2))
+        task1.serialize()
+        task2 = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
+        task2.serialize()
 
-        task = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
-        QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE)
         worker._register_signals()
         worker._task_channel = non_blocking_pipe()
@@ -383,10 +384,28 @@ class TestPreforkedWorker(object):
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
         worker._child_pid = pid
-        assert not worker._send_task(task, time.time(), 0.1)  # broken pipe
         wait_pid_ignore_eintr(pid, 0)
+        assert not worker._send_task(task1, time.time(), 0.1)  # broken pipe
 
-        QUEUE.requeue(task)
+        os.close(worker._task_channel[1])
+        os.close(worker._result_channel[0])
+        worker._unregister_signals()
+
+        worker = PreforkedWorker(QUEUE)
+        worker._register_signals()
+        worker._task_channel = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
+        pid = os.fork()
+        if pid == 0:  # child worker
+            os._exit(0)
+
+        os.close(worker._task_channel[0])
+        os.close(worker._result_channel[1])
+        worker._child_pid = pid
+        wait_pid_ignore_eintr(pid, 0)
+        assert not worker._send_task(task2, time.time(), 0.1)  # broken pipe
+
         os.close(worker._task_channel[1])
         os.close(worker._result_channel[0])
         worker._unregister_signals()
@@ -404,13 +423,12 @@ class TestPreforkedWorker(object):
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
         worker._child_pid = pid
-        assert not worker._send_task(task, 0, 0)  # time out
+        assert not worker._send_task(task2, 0, 0)  # time out
         wait_pid_ignore_eintr(pid, 0)
 
         os.close(worker._task_channel[1])
         os.close(worker._result_channel[0])
         worker._unregister_signals()
-        CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_recv_task(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)

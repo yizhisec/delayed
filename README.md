@@ -209,3 +209,6 @@ A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest 
 
     setup_logger()
     ```
+
+13. **Q: Why not use JSON or MessagePack to serialize tasks?**  
+A: These serializations may confuse some types (eg: bytes / str, list / tuple).

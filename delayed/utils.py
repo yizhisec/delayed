@@ -29,8 +29,8 @@ def wait_pid_ignore_eintr(pid, options):
     while True:
         try:
             return os.waitpid(pid, options)
-        except OSError as e:
-            if e.errno != errno.EINTR:  # pragma: no cover
+        except OSError as e:  # pragma: no cover
+            if e.errno != errno.EINTR:
                 raise
 
 

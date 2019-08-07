@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from .constants import BUF_SIZE
 import errno
 import fcntl
 import os
 import select
 import time
+
+from .constants import BUF_SIZE
 
 
 def ignore_signal(signum, frame):

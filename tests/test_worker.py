@@ -417,7 +417,7 @@ class TestPreforkedWorker(object):
 
         task1 = Task.create(func, (1, 2))
         QUEUE.enqueue(task1)
-        task2 = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
+        task2 = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
         QUEUE.enqueue(task2)
 
         worker = PreforkedWorker(QUEUE)
@@ -439,7 +439,7 @@ class TestPreforkedWorker(object):
             os.read(result_reader, 1)
 
             data_len = BUF_SIZE * 2
-            data = struct.pack('=I', data_len) + '1' * data_len
+            data = struct.pack('=I', data_len) + b'1' * data_len
             data, error_no = try_write(task_writer, data)
             assert error_no == errno.EAGAIN
 
@@ -453,9 +453,9 @@ class TestPreforkedWorker(object):
         os.close(result_reader)
 
         assert worker._recv_task() == task1.data
-        os.write(result_writer, '0')
+        os.write(result_writer, b'0')
         assert worker._recv_task() == task2.data
-        os.write(result_writer, '0')
+        os.write(result_writer, b'0')
         assert worker._recv_task() is None
 
         os.close(task_reader)
@@ -466,7 +466,7 @@ class TestPreforkedWorker(object):
     def test_monitor_task(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        task = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE), timeout=0.1)
+        task = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE), timeout=0.1)
         QUEUE.enqueue(task)
 
         worker = PreforkedWorker(QUEUE)

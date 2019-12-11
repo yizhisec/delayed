@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from .task import Task
-
 
 def delayed(queue):
     """A decorator for defining task functions.
@@ -13,14 +11,16 @@ def delayed(queue):
         callable: A decorator.
     """
     def wrapper(timeout=None):
+        task_class = queue.task_class
+
         def outer(func):
             def _delay(*args, **kwargs):
-                task = Task.create(func, args, kwargs, timeout)
+                task = task_class.create(func, args, kwargs, timeout)
                 queue.enqueue(task)
 
             def _timeout(timeout):
                 def inner(*args, **kwargs):
-                    task = Task.create(func, args, kwargs, timeout)
+                    task = task_class.create(func, args, kwargs, timeout)
                     queue.enqueue(task)
                 return inner
 
@@ -41,8 +41,10 @@ def delay(queue):
         callable: A decorator.
     """
     def wrapper(func):
+        task_class = queue.task_class
+
         def _delay(*args, **kwargs):
-            task = Task.create(func, args, kwargs)
+            task = task_class.create(func, args, kwargs)
             queue.enqueue(task)
         return _delay
     return wrapper
@@ -58,8 +60,10 @@ def delay_in_time(queue):
         callable: A decorator.
     """
     def wrapper(func, timeout):
+        task_class = queue.task_class
+
         def _delay(*args, **kwargs):
-            task = Task.create(func, args, kwargs, timeout)
+            task = task_class.create(func, args, kwargs, timeout)
             queue.enqueue(task)
         return _delay
     return wrapper

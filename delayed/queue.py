@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from .logger import logger
-from .task import Task
+from .task import PickleTask
 from .utils import current_timestamp
 
 
@@ -85,6 +85,7 @@ class Queue(object):
     Args:
         name (str): The task queue name.
         conn (redis.Redis): A redis connection.
+        task_class (type): The class of the tasks in the queue.
         default_timeout (int or float): The default timeout in seconds of the task queue.
             A task runs out of time will be killed.
         requeue_timeout (int or float): The requeue timeout in seconds of the task queue.
@@ -95,19 +96,28 @@ class Queue(object):
             If the length of the queue reaches busy_len, it will ignore requeue_lost().
     """
 
-    def __init__(self, name, conn, default_timeout=600, requeue_timeout=10, busy_len=10):
+    def __init__(self, name, conn, task_class=PickleTask, default_timeout=600, requeue_timeout=10, busy_len=10):
         self._name = name
         self._enqueued_key = name + _ENQUEUED_KEY_SUFFIX
         self._dequeued_key = name + _DEQUEUED_KEY_SUFFIX
         self._noti_key = name + _NOTI_KEY_SUFFIX
         self._id_key = name + _ID_KEY_SUFFIX
         self._conn = conn
+        self._task_class = task_class
         self.default_timeout = default_timeout * 1000
         self._requeue_timeout = requeue_timeout * 1000
         self._busy_len = busy_len
         self._dequeue_script = conn.register_script(_DEQUEUE_SCRIPT)
         self._requeue_script = conn.register_script(_REQUEUE_SCRIPT)
         self._requeue_lost_script = conn.register_script(_REQUEUE_LOST_SCRIPT)
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def task_class(self):
+        return self._task_class
 
     def enqueue(self, task):
         """Enqueues a task to the queue.
@@ -138,7 +148,7 @@ class Queue(object):
                 keys=(self._name, self._enqueued_key, self._dequeued_key),
                 args=(current_timestamp(),))
             if data:
-                task = Task.deserialize(data)
+                task = self._task_class.deserialize(data)
                 logger.debug('Dequeued task %d.', task.id)
                 return task
 

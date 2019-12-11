@@ -8,7 +8,7 @@ import threading
 import time
 
 from delayed.constants import BUF_SIZE
-from delayed.task import Task
+from delayed.task import PickleTask
 from delayed.utils import non_blocking_pipe, select_ignore_eintr, try_write, wait_pid_ignore_eintr
 from delayed.worker import ForkedWorker, PreforkedWorker
 
@@ -38,12 +38,12 @@ class TestWorker(object):
         pid = os.getpid()
 
         worker = ForkedWorker(QUEUE, success_handler=success_handler)
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
 
         worker = PreforkedWorker(QUEUE, success_handler=success_handler)
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
 
@@ -71,12 +71,12 @@ class TestWorker(object):
         monkeypatch.setattr(os, 'close', close)
 
         worker = ForkedWorker(QUEUE)
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
 
         worker = PreforkedWorker(QUEUE)
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         worker.run()
 
@@ -100,13 +100,13 @@ class TestForkedWorker(object):
 
         pid = os.getpid()
         r, w = os.pipe()
-        task = Task.create(os.write, (w, TEST_STRING), timeout=10)
+        task = PickleTask.create(os.write, (w, TEST_STRING), timeout=10)
         QUEUE.enqueue(task)
         worker = ForkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker.run()
         assert os.read(r, 4) == TEST_STRING
 
-        task = Task.create(error_func)
+        task = PickleTask.create(error_func)
         QUEUE.enqueue(task)
         worker.run()
         assert os.read(r, 5) == ERROR_STRING
@@ -115,7 +115,7 @@ class TestForkedWorker(object):
         worker.run()
         assert os.read(r, 4) == TEST_STRING
 
-        task = Task.create(wait, (w,))
+        task = PickleTask.create(wait, (w,))
         QUEUE.enqueue(task)
         threading.Thread(target=kill_child).start()
         worker.run()
@@ -136,14 +136,14 @@ class TestForkedWorker(object):
         monkeypatch.setattr(os, '_exit', lambda n: None)
 
         r, w = os.pipe()
-        task1 = Task.create(func, (1, 2))
+        task1 = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task1)
         worker = ForkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker._register_signals()
         worker._run_task(task1)
         assert os.read(r, 4) == TEST_STRING
 
-        task2 = Task.create(error_func)
+        task2 = PickleTask.create(error_func)
         QUEUE.enqueue(task2)
         worker._register_signals()
         worker._run_task(task2)
@@ -161,7 +161,7 @@ class TestForkedWorker(object):
             worker.stop()
 
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = PickleTask.create(wait, (w,), timeout=0.01)
         QUEUE.enqueue(task)
         worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
         worker.run()
@@ -178,7 +178,7 @@ class TestForkedWorker(object):
             worker.stop()
 
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = PickleTask.create(wait, (w,), timeout=0.01)
         QUEUE.enqueue(task)
         worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
         worker.run()
@@ -207,13 +207,13 @@ class TestPreforkedWorker(object):
         pid = os.getpid()
         r, w = os.pipe()
         for _ in range(2):
-            task = Task.create(os.write, (w, TEST_STRING), timeout=100)
+            task = PickleTask.create(os.write, (w, TEST_STRING), timeout=100)
             QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
         worker.run()
         assert os.read(r, 8) == TEST_STRING * 2
 
-        task = Task.create(error_func)
+        task = PickleTask.create(error_func)
         QUEUE.enqueue(task)
         worker.run()
         assert os.read(r, 5) == ERROR_STRING
@@ -223,7 +223,7 @@ class TestPreforkedWorker(object):
         worker.run()
         assert os.read(r, 8) == TEST_STRING * 2
 
-        task = Task.create(wait, (w,))
+        task = PickleTask.create(wait, (w,))
         QUEUE.enqueue(task)
         threading.Thread(target=kill_child).start()
         worker.run()
@@ -249,9 +249,9 @@ class TestPreforkedWorker(object):
         monkeypatch.setattr(os, 'close', lambda n: None)
 
         r, w = os.pipe()
-        task1 = Task.create(func, (1, 2))
+        task1 = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task1)
-        task2 = Task.create(error_func)
+        task2 = PickleTask.create(error_func)
         QUEUE.enqueue(task2)
 
         worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
@@ -277,7 +277,7 @@ class TestPreforkedWorker(object):
             os.write(w, TEST_STRING)
             os._exit(0)
 
-        task = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
+        task = PickleTask.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
         QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, success_handler=success_handler)
         worker._register_signals()
@@ -341,7 +341,7 @@ class TestPreforkedWorker(object):
             worker.stop()
 
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = PickleTask.create(wait, (w,), timeout=0.01)
         QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
         worker.run()
@@ -358,7 +358,7 @@ class TestPreforkedWorker(object):
             worker.stop()
 
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = PickleTask.create(wait, (w,), timeout=0.01)
         QUEUE.enqueue(task)
         worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
         worker.run()
@@ -367,9 +367,9 @@ class TestPreforkedWorker(object):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_send_task_failed(self):
-        task1 = Task.create(func, (1, 2))
+        task1 = PickleTask.create(func, (1, 2))
         task1.serialize()
-        task2 = Task.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
+        task2 = PickleTask.create(func, ('1' * BUF_SIZE, 2 * BUF_SIZE))
         task2.serialize()
 
         worker = PreforkedWorker(QUEUE)
@@ -433,9 +433,9 @@ class TestPreforkedWorker(object):
     def test_recv_task(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        task1 = Task.create(func, (1, 2))
+        task1 = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task1)
-        task2 = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
+        task2 = PickleTask.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
         QUEUE.enqueue(task2)
 
         worker = PreforkedWorker(QUEUE)
@@ -484,7 +484,7 @@ class TestPreforkedWorker(object):
     def test_monitor_task(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        task = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE), timeout=0.1)
+        task = PickleTask.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE), timeout=0.1)
         QUEUE.enqueue(task)
 
         worker = PreforkedWorker(QUEUE)

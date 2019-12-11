@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from delayed.queue import Queue
-from delayed.task import Task
+from delayed.task import PickleTask
 
 from .common import CONN, DEQUEUED_KEY, ENQUEUED_KEY, func, NOTI_KEY, QUEUE, QUEUE_NAME
 
@@ -10,14 +10,14 @@ class TestQueue(object):
     def test_enqueue(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, ENQUEUED_KEY)
 
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         assert task.id > 0
         assert CONN.llen(QUEUE_NAME) == 1
         assert CONN.llen(NOTI_KEY) == 1
         assert CONN.zcard(ENQUEUED_KEY) == 1
 
-        task2 = Task(None, 'tests.common', 'func', (1, 2))
+        task2 = PickleTask(None, 'tests.common', 'func', (1, 2))
         QUEUE.enqueue(task2)
         assert task2.id == task.id + 1
         assert CONN.llen(QUEUE_NAME) == 2
@@ -30,8 +30,8 @@ class TestQueue(object):
 
         assert QUEUE.dequeue() is None
 
-        task1 = Task.create(func, (1, 2))
-        task2 = Task.create(func, (3,), {'b': 4})
+        task1 = PickleTask.create(func, (1, 2))
+        task2 = PickleTask.create(func, (3,), {'b': 4})
         QUEUE.enqueue(task1)
         QUEUE.enqueue(task2)
 
@@ -65,7 +65,7 @@ class TestQueue(object):
     def test_requeue(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
 
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         assert not QUEUE.requeue(task)
 
@@ -87,7 +87,7 @@ class TestQueue(object):
     def test_release(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
 
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         task = QUEUE.dequeue()
         QUEUE.release(task)
@@ -102,7 +102,7 @@ class TestQueue(object):
         queue = Queue(QUEUE_NAME, CONN)
         assert queue.len() == 0
 
-        task = Task.create(func, (1, 2))
+        task = PickleTask.create(func, (1, 2))
         queue.enqueue(task)
         assert queue.len() == 1
 
@@ -117,7 +117,7 @@ class TestQueue(object):
         queue = Queue(QUEUE_NAME, CONN, default_timeout=0, requeue_timeout=0, busy_len=2)
         assert queue.requeue_lost() == 0
 
-        task1 = Task.create(func, (1, 2))
+        task1 = PickleTask.create(func, (1, 2))
         queue.enqueue(task1)
         assert queue.len() == 1
         assert queue.requeue_lost() == 0
@@ -138,9 +138,9 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 0
         assert CONN.zcard(DEQUEUED_KEY) == 0
 
-        task2 = Task.create(func, (1, 2))
-        task3 = Task.create(func, (1, 2))
-        task4 = Task.create(func, (1, 2))
+        task2 = PickleTask.create(func, (1, 2))
+        task3 = PickleTask.create(func, (1, 2))
+        task4 = PickleTask.create(func, (1, 2))
         queue.enqueue(task2)
         queue.enqueue(task3)
         queue.enqueue(task4)
@@ -187,8 +187,8 @@ class TestQueue(object):
         assert task2 is not None
         queue.release(task2)
 
-        task5 = Task.create(func, (1, 2))
-        task6 = Task.create(func, (1, 2))
+        task5 = PickleTask.create(func, (1, 2))
+        task6 = PickleTask.create(func, (1, 2))
         queue.enqueue(task5)
         queue.enqueue(task6)
         CONN.lpop(NOTI_KEY)

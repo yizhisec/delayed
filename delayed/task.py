@@ -4,6 +4,10 @@ try:
     import cPickle as pickle
 except ImportError:  # pragma: no cover
     import pickle
+try:
+    import ujson as json
+except ImportError:  # pragma: no cover
+    import json
 from importlib import import_module
 
 from .logger import logger
@@ -126,9 +130,7 @@ class Task(object):
         Returns:
             str: The serialized data.
         """
-        if self._data is None:
-            self._data = dumps((self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout))
-        return self._data
+        raise NotImplementedError()
 
     @classmethod
     def deserialize(cls, data):
@@ -140,9 +142,7 @@ class Task(object):
         Returns:
             Task: The deserialized task.
         """
-        task = cls(*loads(data))
-        task._data = data
-        return task
+        raise NotImplementedError()
 
     def run(self):
         """Runs the task.
@@ -154,3 +154,35 @@ class Task(object):
         module = import_module(self._module_name)
         func = getattr(module, self._func_name)
         return func(*self._args, **self._kwargs)
+
+
+class PickleTask(Task):
+    def serialize(self):
+        if self._data is None:
+            self._data = pickle.dumps(
+                (self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout),
+                PICKLE_PROTOCOL_VERSION
+            )
+        return self._data
+
+    @classmethod
+    def deserialize(cls, data):
+        task = cls(*pickle.loads(data))
+        task._data = data
+        return task
+
+
+class JsonTask(Task):
+    def serialize(self):
+        if self._data is None:
+            self._data = json.dumps(
+                (self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout)
+            )
+        return self._data
+
+    @classmethod
+    def deserialize(cls, data):
+        task = cls(*json.loads(data))
+        task._args = tuple(task._args)
+        task._data = data
+        return task

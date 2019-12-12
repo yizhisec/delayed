@@ -384,7 +384,7 @@ class TestPreforkedWorker(object):
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
         worker._child_pid = pid
-        wait_pid_ignore_eintr(pid, 0)
+        assert wait_pid_ignore_eintr(pid, 0) == (pid, 0)
         assert not worker._send_task(task1, time.time(), 0.1)  # broken pipe
 
         os.close(worker._task_channel[1])
@@ -403,7 +403,7 @@ class TestPreforkedWorker(object):
         os.close(worker._task_channel[0])
         os.close(worker._result_channel[1])
         worker._child_pid = pid
-        wait_pid_ignore_eintr(pid, 0)
+        assert wait_pid_ignore_eintr(pid, 0) == (pid, 0)
         assert not worker._send_task(task2, time.time(), 0.1)  # broken pipe
 
         os.close(worker._task_channel[1])
@@ -424,7 +424,7 @@ class TestPreforkedWorker(object):
         os.close(worker._result_channel[1])
         worker._child_pid = pid
         assert not worker._send_task(task2, 0, 0)  # time out
-        wait_pid_ignore_eintr(pid, 0)
+        assert wait_pid_ignore_eintr(pid, 0) == (pid, 0)
 
         os.close(worker._task_channel[1])
         os.close(worker._result_channel[0])
@@ -446,26 +446,30 @@ class TestPreforkedWorker(object):
         p = os.getpid()
         pid = os.fork()
         if pid == 0:  # sender
+            os.close(task_reader)
+            os.close(result_writer)
+
             rlist = (result_reader,)
             worker._child_pid = p
-            worker._send_task(task1, time.time(), 10)
+            assert worker._send_task(task1, time.time(), 10)
             select_ignore_eintr(rlist, (), ())
             os.read(result_reader, 1)
 
-            worker._send_task(task2, time.time(), 10)
+            assert worker._send_task(task2, time.time(), 10)
             select_ignore_eintr(rlist, (), ())
             os.read(result_reader, 1)
 
-            data_len = BUF_SIZE * 2
+            data_len = BUF_SIZE * 3
             data = struct.pack('=I', data_len) + b'1' * data_len
             data, error_no = try_write(task_writer, data)
             assert error_no == errno.EAGAIN
 
-            wlist = (task_writer,)
-            select_ignore_eintr((), wlist, ())
+            select_ignore_eintr((), (task_writer,), ())
             data, error_no = try_write(task_writer, data)
             assert error_no == errno.EAGAIN
-            os._exit(0)
+
+            # not finished
+            os._exit(2)
 
         os.close(task_writer)
         os.close(result_reader)
@@ -475,6 +479,8 @@ class TestPreforkedWorker(object):
         assert worker._recv_task() == task2.data
         os.write(result_writer, b'0')
         assert worker._recv_task() is None
+
+        assert wait_pid_ignore_eintr(pid, 0) == (pid, 0x200)
 
         os.close(task_reader)
         os.close(result_writer)

@@ -110,7 +110,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 ## QA
 
 1. **Q: What's the limitation on a task function?**  
-A: A task function should be defined in module level (except the `__main__` module). Its `args` and `kwargs` should be picklable. 
+A: A task function should be defined in module level (except the `__main__` module). Its `args` and `kwargs` should be picklable.
 
 2. **Q: What's the `name` param of a queue?**  
 A: It's the key used to store the tasks of the queue. A queue with name "default" will use those keys:
@@ -151,7 +151,7 @@ A: It runs such a loop:
     5. When the child process exits or it received result from the pipe, it releases the task.
 
 6. **Q: How does the child process of a worker run?**  
-A: the child of a `ForkedWorker` just runs the task, unmarks the task as dequeued, then exits.
+A: The child of a `ForkedWorker` just runs the task, unmarks the task as dequeued, then exits.
 The child of a `PreforkedWorker` runs such a loop:
     1. It tries to receive a task from the pipe.
     2. If the pipe has been closed, it exits.
@@ -212,7 +212,7 @@ A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest 
 
 13. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
 A: `delayed` uses the `pickle` module to serialize and deserialize tasks.
-If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtime, you can use it without any configurations.
+If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtimes, you can use it without any configurations.
 Otherwise you have to choose the lowest `pickle.HIGHEST_PROTOCOL` of all your Python runtime as the pickle protocol.
 eg: If you want to enqueue a task in Python 3.7 and dequeue it in Python 2.7. Their `pickle.HIGHEST_PROTOCOL` are `4` and `2`, so you need to set the version to `2`:
     ```python

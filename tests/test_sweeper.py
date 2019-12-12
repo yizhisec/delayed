@@ -5,7 +5,6 @@ import time
 
 from delayed.queue import Queue
 from delayed.sweeper import Sweeper
-from delayed.task import PickleTask
 
 from .common import CONN, func, QUEUE_NAME, NOTI_KEY
 
@@ -19,7 +18,7 @@ class TestSweeper(object):
         thread = threading.Thread(target=sweeper.run)
         thread.start()
 
-        task = PickleTask.create(func, (1, 2))
+        task = queue.task_class.create(func, (1, 2))
         queue.enqueue(task)
         CONN.lpop(NOTI_KEY)
 

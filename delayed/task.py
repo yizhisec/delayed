@@ -1,24 +1,20 @@
 # -*- coding: utf-8 -*-
 
-try:
-    import cPickle as pickle
-except ImportError:  # pragma: no cover
-    import pickle
+from ast import literal_eval
 try:
     import ujson as json
 except ImportError:  # pragma: no cover
     import json
+try:
+    import cPickle as pickle
+except ImportError:  # pragma: no cover
+    import pickle
 from importlib import import_module
 
 from .logger import logger
 
 
 PICKLE_PROTOCOL_VERSION = pickle.HIGHEST_PROTOCOL
-loads = pickle.loads
-
-
-def dumps(obj):
-    return pickle.dumps(obj, PICKLE_PROTOCOL_VERSION)
 
 
 def set_pickle_protocol_version(version):
@@ -130,7 +126,7 @@ class Task(object):
         Returns:
             str: The serialized data.
         """
-        raise NotImplementedError()
+        raise NotImplementedError()  # pragma: no cover
 
     @classmethod
     def deserialize(cls, data):
@@ -142,7 +138,7 @@ class Task(object):
         Returns:
             Task: The deserialized task.
         """
-        raise NotImplementedError()
+        raise NotImplementedError()  # pragma: no cover
 
     def run(self):
         """Runs the task.
@@ -156,7 +152,7 @@ class Task(object):
         return func(*self._args, **self._kwargs)
 
 
-class PickleTask(Task):
+class PickledTask(Task):
     def serialize(self):
         if self._data is None:
             self._data = pickle.dumps(
@@ -183,6 +179,20 @@ class JsonTask(Task):
     @classmethod
     def deserialize(cls, data):
         task = cls(*json.loads(data))
-        task._args = tuple(task._args)
+        task._data = data
+        return task
+
+
+class ReprTask(Task):
+    def serialize(self):
+        if self._data is None:
+            self._data = repr(
+                (self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout)
+            )
+        return self._data
+
+    @classmethod
+    def deserialize(cls, data):
+        task = cls(*literal_eval(data))
         task._data = data
         return task

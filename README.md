@@ -75,9 +75,9 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     * Enqueue a predefined task function without importing it:
 
         ```python
-        from delayed.task import Task
+        from delayed.task import PickledTask
 
-        task = Task(id=None, module_name='test', func_name='add', args=(1, 2))
+        task = PickledTask(id=None, module_name='test', func_name='add', args=(1, 2))
         queue.enqueue(task)
         ```
 
@@ -110,7 +110,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 ## QA
 
 1. **Q: What's the limitation on a task function?**  
-A: A task function should be defined in module level (except the `__main__` module). Its `args` and `kwargs` should be picklable. 
+A: A task function should be defined in module level (except the `__main__` module). Its `args` and `kwargs` should be serializable.
 
 2. **Q: What's the `name` param of a queue?**  
 A: It's the key used to store the tasks of the queue. A queue with name "default" will use those keys:
@@ -151,7 +151,7 @@ A: It runs such a loop:
     5. When the child process exits or it received result from the pipe, it releases the task.
 
 6. **Q: How does the child process of a worker run?**  
-A: the child of a `ForkedWorker` just runs the task, unmarks the task as dequeued, then exits.
+A: The child of a `ForkedWorker` just runs the task, unmarks the task as dequeued, then exits.
 The child of a `PreforkedWorker` runs such a loop:
     1. It tries to receive a task from the pipe.
     2. If the pipe has been closed, it exits.
@@ -159,17 +159,23 @@ The child of a `PreforkedWorker` runs such a loop:
     4. It sends the task result to the pipe.
     5. It releases the task.
 
-7. **Q: What's lost tasks?**  
+7. **Q: What's the difference among all the task types?**  
+A: `delayed` offers 3 types of tasks type:
+    * `PickledTask`: The default task type. It uses `cPickle` or `pickle` module to serialize and deserialize its data, so the data should be picklable. You should specify the same pickle protocol version if you use different versions of Python.
+    * `JsonTask`: It uses `ujson` or `json` module to serialize and deserialize its data, so the data should be jsonable. You can use other languages (eg: Golang, Java, etc.) to enqueue a JsonTask. Its drawback is it can't distinguish `tuple` from `list`, or `byte` from `str`. So you can't use it if your tasks cantain binary data.
+    * `ReprTask`: It uses `repr()` and `ast.literal_eval()` to serialize and deserialize its data, so the task data should be Python literal structures.
+
+8. **Q: What's lost tasks?**  
 A: There are 2 situations a task might get lost:
     * a worker popped a task notification, then got killed before dequeueing the task.
     * a worker dequeued a task, then both the monitor and its child process got killed before they releasing the task.
 
-8. **Q: How to recovery lost tasks?**  
+9. **Q: How to recovery lost tasks?**  
 A: Run a sweeper. It dose two things:
     * it keeps the task notification length the same as the task queue.
     * it moves the timeout dequeued tasks back to the task queue.
 
-9. **Q: How to set the timeout of tasks?**  
+10. **Q: How to set the timeout of tasks?**  
 A: You can set the `default_timeout` of a queue or `timeout` of a task:
 
     ```python
@@ -183,7 +189,7 @@ A: You can set the `default_timeout` of a queue or `timeout` of a task:
     delay_in_time(add, timeout=10)(1, 2)
     ```
 
-10. **Q: How to handle the finished tasks?**  
+11. **Q: How to handle the finished tasks?**  
 A: Set the `success_handler` and `error_handler` of the worker. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
@@ -199,10 +205,10 @@ A: Set the `success_handler` and `error_handler` of the worker. The handlers wou
     worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
     ```
 
-11. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
+12. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
 A: When the child process got killed after the `success_handler` be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful.
 
-12. **Q: How to turn on the debug logs?**  
+13. **Q: How to turn on the debug logs?**  
 A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
     ```python
     from delayed.logger import setup_logger
@@ -210,19 +216,16 @@ A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest 
     setup_logger()
     ```
 
-13. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
-A: `delayed` uses the `pickle` module to serialize and deserialize tasks.
-If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtime, you can use it without any configurations.
-Otherwise you have to choose the lowest `pickle.HIGHEST_PROTOCOL` of all your Python runtime as the pickle protocol.
-eg: If you want to enqueue a task in Python 3.7 and dequeue it in Python 2.7. Their `pickle.HIGHEST_PROTOCOL` are `4` and `2`, so you need to set the version to `2`:
-    ```python
-    from delayed.task import set_pickle_protocol_version
+14. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
+A: It depends on the task type you use:
+    * `PickledTask`: If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtimes, you can use it without any configurations. Otherwise you have to choose the lowest `pickle.HIGHEST_PROTOCOL` of all your Python runtime as the pickle protocol. eg: If you want to enqueue a task in Python 3.7 and dequeue it in Python 2.7, their `pickle.HIGHEST_PROTOCOL` are `4` and `2`, so you need to set the version to `2`:
+        ```python
+        from delayed.task import set_pickle_protocol_version
 
-    set_pickle_protocol_version(2)
-    ```
-
-14. **Q: Why not use JSON or MessagePack to serialize tasks?**  
-A: These serializations may confuse some types (eg: `bytes` / `str`, `list` / `tuple`).
+        set_pickle_protocol_version(2)
+        ```
+    * `JsonTask`: It's portable.
+    * `ReprTask`: You can't.
 
 15. **Q: What will happen if I changed the pipe capacity?**  
 A: `delayed` assumes the pipe capacity is 65536 bytes (the default value on Linux and macOS).

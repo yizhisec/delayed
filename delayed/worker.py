@@ -11,7 +11,6 @@ import time
 
 from .logger import logger
 from .constants import BUF_SIZE, SIGNAL_MASK, Status
-from .task import Task
 from .utils import (drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes,
                     select_ignore_eintr, try_write, wait_pid_ignore_eintr, write_byte)
 
@@ -457,6 +456,7 @@ class PreforkedWorker(Worker):
 
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
             super(PreforkedWorker, self)._unregister_signals()
+            task_class = self._queue.task_class
 
             while True:
                 task_data = self._recv_task()
@@ -464,7 +464,7 @@ class PreforkedWorker(Worker):
                     return
 
                 try:
-                    task = Task.deserialize(task_data)
+                    task = task_class.deserialize(task_data)
                 except Exception:
                     logger.exception('Deserialize task failed.')
                     written_bytes = write_byte(result_writer, b'1')

@@ -27,7 +27,7 @@ redis.call('rpush', KEYS[2], '1')
 return true'''
 
 # KEYS: queue_name, noti_key, dequeued_key
-# ARGV: current_timestamp， busy_len
+# ARGV: current_timestamp, busy_len
 _REQUEUE_LOST_SCRIPT = '''local queue_len = redis.call('llen', KEYS[1])
 local noti_len = redis.call('llen', KEYS[2])
 local count = queue_len - noti_len

@@ -182,6 +182,45 @@ class Queue(object):
         """Returns the length of the queue."""
         return self._conn.llen(self._name)
 
+    def dequeued_len(self):
+        """Returns the count of dequeued tasks in the queue."""
+        return self._conn.zcard(self._dequeued_key)
+
+    def index(self, task_id, max_index=0):
+        """Find the task postion in the queue.
+        It's an expensive operation.
+
+        Args:
+            task_id (int): The id of the task.
+            max_index (int): The max index to look for the task. 0 means no limit.
+
+        Returns:
+            int: The task postion starts from 1.
+                0 means it has been dequeued.
+                -1 means it is not in the queue.
+        """
+        if max_index < 0:
+            max_index = -1
+        else:
+            max_index -= 1
+
+        with self._conn.pipeline() as pipe:
+            pipe.zrange(self._dequeued_key, 0, -1)
+            pipe.lrange(self._name, 0, max_index)
+            dequeued_tasks, enqueued_tasks = pipe.execute()
+
+        for task_data in dequeued_tasks:
+            task = Task.deserialize(task_data)
+            if task.id == task_id:
+                return 0
+
+        for index, task_data in enumerate(enqueued_tasks, 1):
+            task = Task.deserialize(task_data)
+            if task.id == task_id:
+                return index
+
+        return -1
+
     def requeue_lost(self):
         """Requeues lost tasks.
         It should be called periodically to prevent losing tasks.

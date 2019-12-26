@@ -99,17 +99,115 @@ class TestQueue(object):
     def test_len(self):
         CONN.delete(QUEUE_NAME)
 
-        queue = Queue(QUEUE_NAME, CONN)
-        assert queue.len() == 0
+        QUEUE = Queue(QUEUE_NAME, CONN)
+        assert QUEUE.len() == 0
 
         task = Task.create(func, (1, 2))
-        queue.enqueue(task)
-        assert queue.len() == 1
+        QUEUE.enqueue(task)
+        assert QUEUE.len() == 1
 
-        task = queue.dequeue()
+        task = QUEUE.dequeue()
         assert task is not None
-        assert queue.len() == 0
-        queue.release(task)
+        assert QUEUE.len() == 0
+        QUEUE.release(task)
+
+    def test_dequeued_len(self):
+        CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
+
+        assert QUEUE.dequeued_len() == 0
+
+        task1 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task1)
+        assert QUEUE.dequeued_len() == 0
+
+        task = QUEUE.dequeue()
+        assert task.id == task1.id
+        assert QUEUE.dequeued_len() == 1
+
+        task2 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task2)
+        assert QUEUE.dequeued_len() == 1
+
+        task = QUEUE.dequeue()
+        assert task.id == task2.id
+        assert QUEUE.dequeued_len() == 2
+
+        task3 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task3)
+        assert QUEUE.dequeued_len() == 2
+
+        task = QUEUE.dequeue()
+        assert task.id == task3.id
+        assert QUEUE.dequeued_len() == 3
+
+        QUEUE.release(task2)
+        assert QUEUE.dequeued_len() == 2
+
+        QUEUE.release(task1)
+        assert QUEUE.dequeued_len() == 1
+
+        QUEUE.release(task3)
+        assert QUEUE.dequeued_len() == 0
+
+    def test_index(self):
+        CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
+
+        assert QUEUE.index(1) == -1
+
+        task1 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task1)
+        assert QUEUE.index(task1.id) == 1
+
+        task2 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task2)
+        assert QUEUE.index(task1.id) == 1
+        assert QUEUE.index(task1.id, 1) == 1
+        assert QUEUE.index(task1.id, 0) == 1
+        assert QUEUE.index(task1.id, -1) == 1
+        assert QUEUE.index(task2.id) == 2
+        assert QUEUE.index(task2.id, 1) == -1
+
+        task3 = Task.create(func, (1, 2))
+        QUEUE.enqueue(task3)
+        assert QUEUE.index(task1.id) == 1
+        assert QUEUE.index(task2.id) == 2
+        assert QUEUE.index(task3.id) == 3
+        assert QUEUE.index(task3.id, 1) == -1
+        assert QUEUE.index(task3.id, 2) == -1
+        assert QUEUE.index(task3.id, 3) == 3
+
+        task = QUEUE.dequeue()
+        assert task.id == task1.id
+        assert QUEUE.index(task1.id) == 0
+        assert QUEUE.index(task2.id) == 1
+        assert QUEUE.index(task3.id) == 2
+
+        task = QUEUE.dequeue()
+        assert task.id == task2.id
+        assert QUEUE.index(task1.id) == 0
+        assert QUEUE.index(task2.id) == 0
+        assert QUEUE.index(task3.id) == 1
+
+        QUEUE.release(task2)
+        assert QUEUE.index(task1.id) == 0
+        assert QUEUE.index(task2.id) == -1
+        assert QUEUE.index(task3.id) == 1
+
+        QUEUE.release(task1)
+        assert QUEUE.index(task1.id) == -1
+        assert QUEUE.index(task2.id) == -1
+        assert QUEUE.index(task3.id) == 1
+
+        task = QUEUE.dequeue()
+        assert task.id == task3.id
+        assert QUEUE.index(task1.id) == -1
+        assert QUEUE.index(task2.id) == -1
+        assert QUEUE.index(task3.id) == 0
+
+        QUEUE.release(task3)
+        assert QUEUE.index(task1.id) == -1
+        assert QUEUE.index(task2.id) == -1
+        assert QUEUE.index(task3.id) == -1
 
     def test_requeue_lost(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)

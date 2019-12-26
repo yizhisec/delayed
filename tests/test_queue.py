@@ -99,7 +99,6 @@ class TestQueue(object):
     def test_len(self):
         CONN.delete(QUEUE_NAME)
 
-        QUEUE = Queue(QUEUE_NAME, CONN)
         assert QUEUE.len() == 0
 
         task = Task.create(func, (1, 2))

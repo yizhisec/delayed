@@ -14,12 +14,13 @@ from .common import func
 
 class TestTask(object):
     def test_create(self):
-        task = Task.create(func, (1, 2), timeout=10)
+        task = Task.create(func, (1, 2), timeout=10, prior=True)
         assert task.module_name == 'tests.common'
         assert task.func_name == 'func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout == 10000
+        assert task.prior
 
     def test_serialize_and_deserialize(self):
         task = Task.create(func, (1, 2))
@@ -33,6 +34,7 @@ class TestTask(object):
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout is None
+        assert not task.prior
 
         task = Task.create(func, (1,), {'b': 2})
         data = task.serialize()
@@ -42,8 +44,9 @@ class TestTask(object):
         assert task.args == (1,)
         assert task.kwargs == {'b': 2}
         assert task.timeout is None
+        assert not task.prior
 
-        task = Task.create(func, kwargs={'a': 1, 'b': 2}, timeout=10)
+        task = Task.create(func, kwargs={'a': 1, 'b': 2}, timeout=10, prior=True)
         data = task.serialize()
         task = Task.deserialize(data)
         assert task.module_name == 'tests.common'
@@ -51,6 +54,7 @@ class TestTask(object):
         assert task.args == ()
         assert task.kwargs == {'a': 1, 'b': 2}
         assert task.timeout == 10000
+        assert task.prior
 
     def test_run(self):
         task = Task.create(func, (1, 2))
@@ -76,6 +80,7 @@ def test_set_pickle_protocol_version():
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout is None
+        assert not task.prior
         task._data = None
         last_data = data
 

@@ -54,17 +54,19 @@ class Task(object):
         kwargs (dict): Arbitrary keyword arguments of the task function.
             It should be picklable.
         timeout (int or float): The timeout in seconds of the task.
+        prior (bool): A prior task will be inserted at the first position.
     """
 
-    __slots__ = ['_id', '_module_name', '_func_name', '_args', '_kwargs', '_timeout', '_data']
+    __slots__ = ['_id', '_module_name', '_func_name', '_args', '_kwargs', '_timeout', '_prior', '_data']
 
-    def __init__(self, id, module_name, func_name, args=None, kwargs=None, timeout=None):
+    def __init__(self, id, module_name, func_name, args=None, kwargs=None, timeout=None, prior=False):
         self._id = id
         self._module_name = module_name
         self._func_name = func_name
         self._args = () if args is None else args
         self._kwargs = {} if kwargs is None else kwargs
         self._timeout = timeout
+        self._prior = prior
         self._data = None
 
     @property
@@ -97,11 +99,15 @@ class Task(object):
         return self._timeout
 
     @property
+    def prior(self):
+        return self._prior
+
+    @property
     def data(self):
         return self._data
 
     @classmethod
-    def create(cls, func, args=None, kwargs=None, timeout=None):
+    def create(cls, func, args=None, kwargs=None, timeout=None, prior=False):
         """Create a task.
 
         Args:
@@ -112,13 +118,14 @@ class Task(object):
             kwargs (dict): Arbitrary keyword arguments of the task function.
                 It should be picklable.
             timeout (int or float): The timeout in seconds of the task.
+            prior (bool): A prior task will be inserted at the first position.
 
         Returns:
             Task: The created task.
         """
         if timeout:
             timeout = timeout * 1000
-        return cls(None, func.__module__, func.__name__, args, kwargs, timeout)
+        return cls(None, func.__module__, func.__name__, args, kwargs, timeout, prior)
 
     def serialize(self):
         """Serializes the task to a string.
@@ -127,7 +134,20 @@ class Task(object):
             str: The serialized data.
         """
         if self._data is None:
-            self._data = dumps((self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout))
+            data = self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout, self._prior
+
+            i = 0
+            if not self._prior:
+                i -= 1
+                if self._timeout is None:
+                    i -= 1
+                    if not self._kwargs:
+                        i -= 1
+                        if not self._args:
+                            i -= 1
+            if i < 0:
+                data = data[:i]
+            self._data = dumps(data)
         return self._data
 
     @classmethod

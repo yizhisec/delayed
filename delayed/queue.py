@@ -16,13 +16,17 @@ redis.call('zadd', KEYS[3], tonumber(ARGV[1]) + timeout, task)
 return task'''
 
 # KEYS: queue_name, noti_key, enqueued_key, dequeued_key
-# ARGV: task_data, timeout
+# ARGV: task_data, timeout, prior
 _REQUEUE_SCRIPT = '''local deleted = redis.call('zrem', KEYS[4], ARGV[1])
 if deleted == 0 then
     return false
 end
 redis.call('zadd', KEYS[3], ARGV[2], ARGV[1])
-redis.call('rpush', KEYS[1], ARGV[1])
+if ARGV[3] == '0' then
+    redis.call('rpush', KEYS[1], ARGV[1])
+else
+    redis.call('lpush', KEYS[1], ARGV[1])
+end
 redis.call('rpush', KEYS[2], '1')
 return true'''
 
@@ -120,7 +124,10 @@ class Queue(object):
         logger.debug('Enqueuing task %d.', task.id)
         data = task.serialize()
         with self._conn.pipeline() as pipe:
-            pipe.rpush(self._name, data)
+            if task.prior:
+                pipe.lpush(self._name, data)
+            else:
+                pipe.rpush(self._name, data)
             pipe.rpush(self._noti_key, '1')
             pipe.zadd(self._enqueued_key, {data: (task.timeout or self.default_timeout) + self._requeue_timeout})
             pipe.execute()
@@ -157,7 +164,7 @@ class Queue(object):
         logger.debug('Requeuing task %d.', task.id)
         requeued = self._requeue_script(
             keys=(self._name, self._noti_key, self._enqueued_key, self._dequeued_key),
-            args=(data, (task.timeout or self.default_timeout) + self._requeue_timeout))
+            args=(data, (task.timeout or self.default_timeout) + self._requeue_timeout, int(task.prior)))
         if requeued:
             logger.debug('Requeued task %d.', task.id)
         else:

@@ -32,42 +32,61 @@ class TestQueue(object):
 
         task1 = Task.create(func, (1, 2))
         task2 = Task.create(func, (3,), {'b': 4})
+        task3 = Task.create(func, kwargs={'a': 5, 'b': 6}, prior=True)
         QUEUE.enqueue(task1)
         QUEUE.enqueue(task2)
+        QUEUE.enqueue(task3)
 
-        task_id = task1.id
-        task1 = QUEUE.dequeue()
+        task = QUEUE.dequeue()
+        assert CONN.llen(QUEUE_NAME) == 2
+        assert CONN.llen(NOTI_KEY) == 2
+        assert CONN.zcard(ENQUEUED_KEY) == 3
+        assert CONN.zcard(DEQUEUED_KEY) == 1
+        assert task3.id == task3.id
+        assert task.module_name == 'tests.common'
+        assert task.func_name == 'func'
+        assert task.args == ()
+        assert task.kwargs == {'a': 5, 'b': 6}
+        assert task.prior
+        assert task.data is not None
+
+        task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 1
         assert CONN.llen(NOTI_KEY) == 1
-        assert CONN.zcard(ENQUEUED_KEY) == 2
-        assert CONN.zcard(DEQUEUED_KEY) == 1
-        assert task1.id == task_id
-        assert task1.module_name == 'tests.common'
-        assert task1.func_name == 'func'
-        assert task1.args == (1, 2)
-        assert task1.kwargs == {}
-        assert task1.data is not None
+        assert CONN.zcard(ENQUEUED_KEY) == 3
+        assert CONN.zcard(DEQUEUED_KEY) == 2
+        assert task.id == task1.id
+        assert task.module_name == 'tests.common'
+        assert task.func_name == 'func'
+        assert task.args == (1, 2)
+        assert task.kwargs == {}
+        assert not task.prior
+        assert task.data is not None
 
-        task_id = task2.id
-        task2 = QUEUE.dequeue()
+        task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 0
         assert CONN.llen(NOTI_KEY) == 0
-        assert CONN.zcard(ENQUEUED_KEY) == 2
-        assert CONN.zcard(DEQUEUED_KEY) == 2
-        assert task2.id == task_id
-        assert task2.module_name == 'tests.common'
-        assert task2.func_name == 'func'
-        assert task2.args == (3,)
-        assert task2.kwargs == {'b': 4}
-        assert task2.data is not None
+        assert CONN.zcard(ENQUEUED_KEY) == 3
+        assert CONN.zcard(DEQUEUED_KEY) == 3
+        assert task.id == task2.id
+        assert task.module_name == 'tests.common'
+        assert task.func_name == 'func'
+        assert task.args == (3,)
+        assert task.kwargs == {'b': 4}
+        assert task.data is not None
+        assert not task.prior
+
         CONN.delete(DEQUEUED_KEY, ENQUEUED_KEY)
 
     def test_requeue(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)
 
-        task = Task.create(func, (1, 2))
-        QUEUE.enqueue(task)
-        assert not QUEUE.requeue(task)
+        task1 = Task.create(func, (1, 2))
+        task2 = Task.create(func, (1, 2), prior=True)
+        QUEUE.enqueue(task1)
+        QUEUE.enqueue(task2)
+        assert not QUEUE.requeue(task1)
+        assert not QUEUE.requeue(task2)
 
         task = QUEUE.dequeue()
         data = task.data
@@ -78,11 +97,25 @@ class TestQueue(object):
         task._data = data
         assert QUEUE.requeue(task)
         assert CONN.zcard(DEQUEUED_KEY) == 0
-        task = QUEUE.dequeue()
-        assert task is not None
-        QUEUE.release(task)
 
-        assert not QUEUE.requeue(task)
+        task = QUEUE.dequeue()
+        assert task.id == task2.id
+        task = QUEUE.dequeue()
+        assert task.id == task1.id
+
+        QUEUE.requeue(task1)
+        QUEUE.requeue(task2)
+
+        task = QUEUE.dequeue()
+        assert task.id == task2.id
+        task = QUEUE.dequeue()
+        assert task.id == task1.id
+
+        QUEUE.release(task1)
+        QUEUE.release(task2)
+
+        assert not QUEUE.requeue(task1)
+        assert not QUEUE.requeue(task2)
 
     def test_release(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, DEQUEUED_KEY, ENQUEUED_KEY)

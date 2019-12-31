@@ -170,7 +170,7 @@ A: Run a sweeper. It dose two things:
     * it moves the timeout dequeued tasks back to the task queue.
 
 9. **Q: How to set the timeout of tasks?**  
-A: You can set the `default_timeout` of a queue or `timeout` of a task:
+A: You can set `default_timeout` of a queue or `timeout` of a task:
 
     ```python
     from delayed.delay import delay_in_time
@@ -183,7 +183,15 @@ A: You can set the `default_timeout` of a queue or `timeout` of a task:
     delay_in_time(add, timeout=10)(1, 2)
     ```
 
-10. **Q: How to handle the finished tasks?**  
+10. **Q: How to enqueue a task in front of a queue?**  
+A: You can set `prior` of the task to `True`:
+
+    ```python
+    task = Task(id=None, module_name='test', func_name='add', args=(1, 2), prior=True)
+    queue.enqueue(task)
+    ```
+
+11. **Q: How to handle the finished tasks?**  
 A: Set the `success_handler` and `error_handler` of the worker. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
@@ -199,10 +207,10 @@ A: Set the `success_handler` and `error_handler` of the worker. The handlers wou
     worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
     ```
 
-11. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
+12. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
 A: When the child process got killed after the `success_handler` be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful.
 
-12. **Q: How to turn on the debug logs?**  
+13. **Q: How to turn on the debug logs?**  
 A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
     ```python
     from delayed.logger import setup_logger
@@ -210,7 +218,7 @@ A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest 
     setup_logger()
     ```
 
-13. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
+14. **Q: Can I enqueue and dequeue tasks in different Python versions?**  
 A: `delayed` uses the `pickle` module to serialize and deserialize tasks.
 If `pickle.HIGHEST_PROTOCOL` is equal among all your Python runtimes, you can use it without any configurations.
 Otherwise you have to choose the lowest `pickle.HIGHEST_PROTOCOL` of all your Python runtime as the pickle protocol.
@@ -221,10 +229,10 @@ eg: If you want to enqueue a task in Python 3.7 and dequeue it in Python 2.7. Th
     set_pickle_protocol_version(2)
     ```
 
-14. **Q: Why not use JSON or MessagePack to serialize tasks?**  
+15. **Q: Why not use JSON or MessagePack to serialize tasks?**  
 A: These serializations may confuse some types (eg: `bytes` / `str`, `list` / `tuple`).
 
-15. **Q: What will happen if I changed the pipe capacity?**  
+16. **Q: What will happen if I changed the pipe capacity?**  
 A: `delayed` assumes the pipe capacity is 65536 bytes (the default value on Linux and macOS).
 To reduce syscalls, it won't check whether the pipe is writable if the length of data to be written is less than 65536.
 If your system has a lower pipe capacity, the `PreforkedWorker` may not working well for some large task.

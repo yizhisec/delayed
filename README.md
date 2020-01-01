@@ -12,10 +12,10 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## Requirements
 
-1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.7 and PyPy 3.5.
+1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.8, PyPy and PyPy3.
 2. UNIX-like systems (with os.fork() implemented, pipe capacity at least 65536 bytes), tested on Ubuntu and macOS.
 3. Redis 2.6.0 or later.
-4. Keep syncing time among all the machines of a task queue.
+4. Keep syncing time among all the machines of each task queue.
 
 ## Getting started
 

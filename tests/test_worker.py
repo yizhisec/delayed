@@ -4,8 +4,11 @@ import errno
 import os
 import signal
 import struct
+import sys
 import threading
 import time
+
+import pytest
 
 from delayed.constants import BUF_SIZE
 from delayed.task import Task
@@ -149,6 +152,22 @@ class TestForkedWorker(object):
         worker._run_task(task2)
         assert os.read(r, 5) == ERROR_STRING
 
+        task3 = Task.create(sys.exit)
+        QUEUE.enqueue(task3)
+        worker._register_signals()
+        with pytest.raises(SystemExit) as exc_info:
+            worker._run_task(task3)
+        assert exc_info.value.code is None
+        assert os.read(r, 4) == TEST_STRING
+
+        task4 = Task.create(sys.exit, (1,))
+        QUEUE.enqueue(task4)
+        worker._register_signals()
+        with pytest.raises(SystemExit) as exc_info:
+            worker._run_task(task4)
+        assert exc_info.value.code == 1
+        assert os.read(r, 5) == ERROR_STRING
+
         os.close(r)
         os.close(w)
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
@@ -264,10 +283,40 @@ class TestPreforkedWorker(object):
         assert os.read(r, 4) == TEST_STRING
         assert os.read(r, 5) == ERROR_STRING
 
+        close(worker._task_channel[0])
+        close(worker._result_channel[1])
+
+        def success_handler2(task):
+            os.write(w, TEST_STRING)
+            os.write(task_writer, struct.pack('=I', len(task4.data)) + task4.data)
+
+        task3 = Task.create(sys.exit)
+        QUEUE.enqueue(task3)
+        task4 = Task.create(sys.exit, (1,))
+        QUEUE.enqueue(task4)
+
+        worker = PreforkedWorker(QUEUE, success_handler=success_handler2, error_handler=error_handler)
+        worker._register_signals()
+        worker._task_channel = _, task_writer = non_blocking_pipe()
+        worker._result_channel = non_blocking_pipe()
+
+        os.write(task_writer, struct.pack('=I', len(task3.data)) + task3.data)
+        with pytest.raises(SystemExit) as exc_info:
+            worker._run_tasks()
+        assert exc_info.value.code is None
+        assert os.read(r, 4) == TEST_STRING
+
+        worker._register_signals()
+        with pytest.raises(SystemExit) as exc_info:
+            worker._run_tasks()
+        assert exc_info.value.code == 1
+        assert os.read(r, 5) == ERROR_STRING
+
         close(r)
         close(w)
         close(worker._task_channel[0])
         close(worker._result_channel[1])
+
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks_with_large_size(self):

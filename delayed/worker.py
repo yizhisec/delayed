@@ -222,10 +222,10 @@ class ForkedWorker(Worker):
         Args:
             task (delayed.task.Task): The task to be run.
         """
-        error_code = 1
+        exit_code = 1
         try:
             self._unregister_signals()
-            error_code = 0
+            exit_code = 0
             try:
                 task.run()
             except Exception:
@@ -248,7 +248,7 @@ class ForkedWorker(Worker):
             finally:
                 self._release_task(task)
         finally:
-            os._exit(error_code)
+            os._exit(exit_code)
 
 
 class PreforkedWorker(Worker):
@@ -453,6 +453,7 @@ class PreforkedWorker(Worker):
         """Runs tasks.
         The monitor sends the tasks to the worker through a pipe.
         """
+        exit_code = 1
         try:
             task_reader, task_writer = self._task_channel
             os.close(task_writer)
@@ -468,6 +469,7 @@ class PreforkedWorker(Worker):
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
             super(PreforkedWorker, self)._unregister_signals()
 
+            exit_code = 0
             while True:
                 task_data = self._recv_task()
                 if not task_data:
@@ -488,6 +490,7 @@ class PreforkedWorker(Worker):
                         written_bytes = write_byte(result_writer, b'1')
                     except SystemExit as e:
                         if e.code:
+                            exit_code = e.code
                             if self._error_handler:
                                 self._handle_error(task, None, sys.exc_info())
                             written_bytes = write_byte(result_writer, b'1')
@@ -508,7 +511,7 @@ class PreforkedWorker(Worker):
                     logger.error('Write to result_writer failed.')
                     return
         finally:
-            os._exit(1)
+            os._exit(exit_code)
 
     def _recv_task(self):
         """Receives a task from its monitor.

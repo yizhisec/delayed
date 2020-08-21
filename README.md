@@ -12,8 +12,8 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
 ## Requirements
 
-1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.8, PyPy and PyPy3.
-2. UNIX-like systems (with os.fork() implemented, pipe capacity at least 65536 bytes), tested on Ubuntu and macOS.
+1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.9, PyPy and PyPy3.
+2. UNIX-like systems (with os.fork() implemented), tested on Ubuntu and macOS.
 3. Redis 2.6.0 or later.
 4. Keep syncing time among all the machines of each task queue.
 
@@ -77,7 +77,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         ```python
         from delayed.task import Task
 
-        task = Task(id=None, func_path='test.add', args=(1, 2))
+        task = Task(func_path='test.add', args=(1,), kwargs={'b': 2})
         queue.enqueue(task)
         ```
 
@@ -165,7 +165,7 @@ A: There are 2 situations a task might get lost:
     * a worker dequeued a task, then both the monitor and its child process got killed before they releasing the task.
 
 8. **Q: How to recovery lost tasks?**  
-A: Run a sweeper. It dose two things:
+A: Runs a sweeper. It dose two things:
     * it keeps the task notification length the same as the task queue.
     * it moves the timeout dequeued tasks back to the task queue.
 
@@ -186,12 +186,12 @@ A: You can set `default_timeout` of a queue or `timeout` of a task:
 A: You can set `prior` of the task to `True`:
 
     ```python
-    task = Task(id=None, func_path='test.add', args=(1, 2), prior=True)
+    task = Task(func_path='test.add', args=(1, 2), prior=True)
     queue.enqueue(task)
     ```
 
 11. **Q: How to handle the failed tasks?**  
-A: Set the `error_handler` of the task. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
+A: Sets the `error_handler` of the task. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
     from delayed.delay import delay_with_params
@@ -216,7 +216,7 @@ A: Set the `error_handler` of the task. The handlers would be called in a forked
 A: If both the child process and the monitor process got killed at the same time, there is no chance to call the `error_handler`.
 
 13. **Q: How to turn on the debug logs?**  
-A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
+A: Adds a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
     ```python
     from delayed.logger import setup_logger
 

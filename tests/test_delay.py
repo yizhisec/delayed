@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from delayed.delay import delay_in_time, delayed
+from delayed.delay import delay_with_params, delayed
 from .common import CONN, DELAY, func, QUEUE, QUEUE_NAME
 
 
 DELAYED = delayed(QUEUE)
-DELAY_IN_TIME = delay_in_time(QUEUE)
+DELAY_WITH_PARAMS = delay_with_params(QUEUE)
 
 
 @DELAYED()
@@ -65,7 +65,7 @@ def test_delay():
 def test_delay_in_time():
     CONN.delete(QUEUE_NAME)
 
-    DELAY_IN_TIME(func, 10)(1, 2)
+    DELAY_WITH_PARAMS(timeout=10)(func)(1, 2)
     assert QUEUE.len() == 1
     task = QUEUE.dequeue()
     assert task.timeout == 10000

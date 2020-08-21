@@ -32,7 +32,7 @@ def delayed(queue):
 
 
 def delay(queue):
-    """A decorator for defining task functions with default timeout.
+    """A decorator for defining task functions with default params.
 
     Args:
         queue (delayed.queue.Queue): The task queue.
@@ -48,8 +48,8 @@ def delay(queue):
     return wrapper
 
 
-def delay_in_time(queue):
-    """A decorator for defining task functions with specified timeout.
+def delay_with_params(queue):
+    """A decorator for defining task functions with specified params.
 
     Args:
         queue (delayed.queue.Queue): The task queue.
@@ -57,9 +57,11 @@ def delay_in_time(queue):
     Returns:
         callable: A decorator.
     """
-    def wrapper(func, timeout):
-        def _delay(*args, **kwargs):
-            task = Task.create(func, args, kwargs, timeout)
-            queue.enqueue(task)
-        return _delay
-    return wrapper
+    def outer(timeout=None, prior=True, error_handler=None):
+        def wrapper(func):
+            def _delay(*args, **kwargs):
+                task = Task.create(func, args, kwargs, timeout, prior, error_handler)
+                queue.enqueue(task)
+            return _delay
+        return wrapper
+    return outer

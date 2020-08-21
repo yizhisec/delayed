@@ -29,13 +29,11 @@ class Worker(object):
         error_handler (callable): The error callback.
     """
 
-    __slots__ = ['_queue', '_kill_timeout', '_success_handler', '_error_handler', '_status']
+    __slots__ = ['_queue', '_kill_timeout', '_status']
 
-    def __init__(self, queue, kill_timeout=5, success_handler=None, error_handler=None):
+    def __init__(self, queue, kill_timeout=5):
         self._queue = queue
         self._kill_timeout = kill_timeout
-        self._success_handler = success_handler
-        self._error_handler = error_handler
         self._status = Status.STOPPED
 
     def run(self):  # pragma: no cover
@@ -46,37 +44,6 @@ class Worker(object):
         """Stops the worker."""
         self._status = Status.STOPPING
         logger.debug('Stopping %s %d.', self.__class__.__name__, os.getpid())
-
-    def _handler_success(self, task):
-        """Calls the success handler.
-
-        Args:
-            task (delayed.task.Task): The success task.
-        """
-        logger.debug('Calling success handle for task %d.', task.id)
-        try:
-            self._success_handler(task)
-        except Exception:  # pragma: no cover
-            logger.exception('Call success handler for task %d failed.', task.id)
-        else:
-            logger.debug('Called success handle for task %d.', task.id)
-
-    def _handle_error(self, task, kill_signal, exc_info):
-        """Calls the error handler.
-
-        Args:
-            task (delayed.task.Task): The error task.
-            kill_signal (int or None): The kill signal of the worker. None means not be killed.
-            exc_info (type, Exception, traceback.Traceback): The exception info if the worker raises an
-                uncaught exception.
-        """
-        logger.debug('Calling error handle for task %d.', task.id)
-        try:
-            self._error_handler(task, kill_signal, exc_info)
-        except Exception:  # pragma: no cover
-            logger.exception('Call error handle for task %d failed.', task.id)
-        else:
-            logger.debug('Called error handle for task %d.', task.id)
 
     def _requeue_task(self, task):
         """Requeues a task.
@@ -195,8 +162,8 @@ class ForkedWorker(Worker):
                         if exit_status:
                             kill_signal = exit_status & SIGNAL_MASK
                             if kill_signal:
-                                if self._error_handler:
-                                    self._handle_error(task, kill_signal, None)
+                                if task.error_handler_path:
+                                    task.handle_error(kill_signal, None)
                             else:  # task hasn't been run
                                 self._requeue_task(task)
                                 return
@@ -211,8 +178,8 @@ class ForkedWorker(Worker):
                         killing = True
         except Exception:  # pragma: no cover
             logger.exception('Monitor task %d error.', task.id)
-            if self._error_handler:
-                self._error_handler(task, None, sys.exc_info())
+            if task.error_handler_path:
+                task.handle_error(None, sys.exc_info())
 
         self._release_task(task)
 
@@ -230,21 +197,15 @@ class ForkedWorker(Worker):
                 task.run()
             except Exception:
                 logger.exception('Run task %d failed.', task.id)
-                if self._error_handler:
-                    self._handle_error(task, None, sys.exc_info())
+                if task.error_handler_path:
+                    task.handle_error(None, sys.exc_info())
             except SystemExit as e:
                 if e.code:
-                    if self._error_handler:
-                        self._handle_error(task, None, sys.exc_info())
-                else:
-                    # if exit code is 0 or None, the task is considered as successful,
-                    # but the worker should exit after handle the task.
-                    if self._success_handler:
-                        self._handler_success(task)
+                    if task.error_handler_path:
+                        task.handle_error(None, sys.exc_info())
+                # else if exit code is 0 or None, the task is considered as successful,
+                # but the worker should still exit.
                 raise
-            else:
-                if self._success_handler:
-                    self._handler_success(task)
             finally:
                 self._release_task(task)
         finally:
@@ -361,8 +322,8 @@ class PreforkedWorker(Worker):
                                 if exit_status:
                                     kill_signal = exit_status & SIGNAL_MASK
                                     if kill_signal:
-                                        if self._error_handler:
-                                            self._handle_error(task, kill_signal, None)
+                                        if task.error_handler_path:
+                                            task.handle_error(kill_signal, None)
                                     else:  # task hasn't been run
                                         self._requeue_task(task)
                                         return
@@ -386,8 +347,8 @@ class PreforkedWorker(Worker):
                         killing = True
         except Exception:  # pragma: no cover
             logger.exception('Monitor task %d error.', task.id)
-            if self._error_handler:
-                self._error_handler(task, 0, sys.exc_info())
+            if task.error_handler_path:
+                task.handle_error(0, sys.exc_info())
 
         self._release_task(task)
 
@@ -455,7 +416,7 @@ class PreforkedWorker(Worker):
         """
         exit_code = 1
         try:
-            task_reader, task_writer = self._task_channel
+            task_writer = self._task_channel[1]
             os.close(task_writer)
 
             result_reader, result_writer = self._result_channel
@@ -485,25 +446,21 @@ class PreforkedWorker(Worker):
                         task.run()
                     except Exception:
                         logger.exception('Run task %d failed.', task.id)
-                        if self._error_handler:
-                            self._handle_error(task, None, sys.exc_info())
+                        if task.error_handler_path:
+                            task.handle_error(None, sys.exc_info())
                         written_bytes = write_byte(result_writer, b'1')
                     except SystemExit as e:
                         if e.code:
                             exit_code = e.code
-                            if self._error_handler:
-                                self._handle_error(task, None, sys.exc_info())
+                            if task.error_handler_path:
+                                task.handle_error(None, sys.exc_info())
                             written_bytes = write_byte(result_writer, b'1')
                         else:
                             # if exit code is 0 or None, the task is considered as successful,
-                            # but the worker should exit after handle the task.
-                            if self._success_handler:
-                                self._handler_success(task)
+                            # but the worker should still exit.
                             written_bytes = write_byte(result_writer, b'0')
                         raise
                     else:
-                        if self._success_handler:
-                            self._handler_success(task)
                         written_bytes = write_byte(result_writer, b'0')
                     finally:
                         self._release_task(task)

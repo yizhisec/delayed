@@ -77,7 +77,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         ```python
         from delayed.task import Task
 
-        task = Task(id=None, module_name='test', func_name='add', args=(1, 2))
+        task = Task(id=None, func_path='test.add', args=(1, 2))
         queue.enqueue(task)
         ```
 
@@ -173,42 +173,47 @@ A: Run a sweeper. It dose two things:
 A: You can set `default_timeout` of a queue or `timeout` of a task:
 
     ```python
-    from delayed.delay import delay_in_time
+    from delayed.delay import delay_with_params
 
     queue = Queue('default', conn, default_timeout=60)
 
     delayed_add.timeout(10)(1, 2)
 
-    delay_in_time = delay_in_time(queue)
-    delay_in_time(add, timeout=10)(1, 2)
+    delay_with_params(queue)(timeout=10)(add)(1, 2)
     ```
 
-10. **Q: How to enqueue a task in front of a queue?**  
+10. **Q: How to enqueue a task in front of the queue?**  
 A: You can set `prior` of the task to `True`:
 
     ```python
-    task = Task(id=None, module_name='test', func_name='add', args=(1, 2), prior=True)
+    task = Task(id=None, func_path='test.add', args=(1, 2), prior=True)
     queue.enqueue(task)
     ```
 
-11. **Q: How to handle the finished tasks?**  
-A: Set the `success_handler` and `error_handler` of the worker. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
+11. **Q: How to handle the failed tasks?**  
+A: Set the `error_handler` of the task. The handlers would be called in a forked process, except the forked process got killed or the monitor process raised an exception.
 
     ```python
-    def success_handler(task):
-        logging.info('task %d finished', task.id)
+    from delayed.delay import delay_with_params
 
     def error_handler(task, kill_signal, exc_info):
         if kill_signal:
             logging.error('task %d got killed by signal %d', task.id, kill_signal)
         else:
-            logging.exception('task %d failed', exc_info=exc_info)
+            logging.exception('task %d failed', task.id, exc_info=exc_info)
 
-    worker = PreforkedWorker(Queue, success_handler=success_handler, error_handler=error_handler)
+    @delayed_with_param(queue)(error_handler=error_handler)
+    def error():
+        raise Exception
+
+    def error2():
+        raise Exception
+
+    task = Task.create(func_path='test.error2', error_handler=error_handler)
     ```
 
-12. **Q: Why does sometimes both `success_handler` and `error_handler` be called for a single task?**  
-A: When the child process got killed after the `success_handler` be called, or the monitor process got killed but the child process still finished the task, both handlers would be called. You can consider it as successful.
+12. **Q: Why does sometimes the `error_handler` not be called for a failed task?**  
+A: If both the child process and the monitor process got killed at the same time, there is no chance to call the `error_handler`.
 
 13. **Q: How to turn on the debug logs?**  
 A: Add a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest way is to call `delayed.logger.setup_logger()`:
@@ -235,10 +240,40 @@ A: These serializations may confuse some types (eg: `bytes` / `str`, `list` / `t
 16. **Q: What will happen if I changed the pipe capacity?**  
 A: `delayed` assumes the pipe capacity is 65536 bytes (the default value on Linux and macOS).
 To reduce syscalls, it won't check whether the pipe is writable if the length of data to be written is less than 65536.
-If your system has a lower pipe capacity, the `PreforkedWorker` may not working well for some large task.
+If your system has a lower pipe capacity, the `PreforkedWorker` may not working well for some large tasks.
 To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
     ```python
     import delayed.constants
 
     delayed.constants.BUF_SIZE = 1024
     ```
+
+## Release notes
+
+* 0.8:
+    1. The `Task` struct has been changed, it's not compatible with older versions.
+        * Removes `module_name` and `func_name` from `Task`, adds `func_path` instead.
+        * Adds `error_handler_path` to `Task`.
+    2. Removes `success_handler` and `error_handler` from `Worker`.
+
+* 0.7:
+    1. Implements prior task.
+
+* 0.6:
+    1. Adds `dequeued_len()` and `index` to `Queue`.
+
+* 0.5:
+    1. Adds `delayed.task.set_pickle_protocol_version()`.
+
+* 0.4:
+    1. Refactories and fixes bugs.
+
+* 0.3:
+    1. Changes param `second` to `timeout` for `delayed.delayed()`.
+    2. Adds debug log.
+
+* 0.2:
+    1. Adds `timeout()` to `delayed.delayed()`.
+
+* 0.1:
+    1. Init version.

@@ -11,6 +11,7 @@ import time
 import pytest
 
 from delayed.constants import BUF_SIZE
+from delayed.delay import delay_with_params
 from delayed.task import Task
 from delayed.utils import non_blocking_pipe, select_ignore_eintr, try_write, wait_pid_ignore_eintr
 from delayed.worker import ForkedWorker, PreforkedWorker
@@ -20,35 +21,89 @@ from .common import CONN, DELAY, DEQUEUED_KEY, ENQUEUED_KEY, func, NOTI_KEY, QUE
 
 TEST_STRING = b'test'
 ERROR_STRING = b'error'
-COUNT = 0
+r = w = 0
+
+close = os.close
 
 
-def error_func():
+def error_func(*args, **kwargs):
     raise Exception('test error')
 
 
-def wait(fd):
-    os.write(fd, b'1')
+def error_handler(task, kill_signal, exc_info):
+    os.write(w, ERROR_STRING)
+    os.kill(task.args[0], signal.SIGHUP)
+
+
+def error_handler2(task, kill_signal, exc_info):
+    os.write(w, ERROR_STRING)
+
+
+def error_handler3(task, kill_signal, exc_info):
+    assert kill_signal == signal.SIGTERM
+    os.kill(task.args[0], signal.SIGHUP)
+
+
+def error_handler4(task, kill_signal, exc_info):
+    assert kill_signal == signal.SIGKILL
+    os.kill(task.args[0], signal.SIGHUP)
+
+
+def error_handler5(task, kill_signal, exc_info):
+    os.write(w, ERROR_STRING)
+    close(task.kwargs['task_writer'])
+
+
+def wait(*args, **kwargs):
+    os.write(w, b'1')
     time.sleep(10)
+
+
+def stop(pid):
+    os.kill(pid, signal.SIGHUP)
+
+
+def task_func():
+    os.write(w, TEST_STRING)
+
+
+def task_func2(task_writer, data):
+    os.write(w, TEST_STRING)
+    os.write(task_writer, data)
+
+
+def task_func3(*args, **kwargs):
+    os.write(w, TEST_STRING)
+    os._exit(0)
+
+
+def exit_func(code, *args, **kwargs):
+    sys.exit(code)
 
 
 class TestWorker(object):
     def test_run(self, monkeypatch):
-        def success_handler(task):
-            os.kill(pid, signal.SIGHUP)
-
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        global r, w
+        r, w = os.pipe()
         pid = os.getpid()
 
-        worker = ForkedWorker(QUEUE, success_handler=success_handler)
-        task = Task.create(func, (1, 2))
+        worker = ForkedWorker(QUEUE)
+        task = Task.create(task_func)
+        QUEUE.enqueue(task)
+        task = Task.create(stop, (pid,))
         QUEUE.enqueue(task)
         worker.run()
+        assert os.read(r, 4) == TEST_STRING
 
-        worker = PreforkedWorker(QUEUE, success_handler=success_handler)
-        task = Task.create(func, (1, 2))
+        worker = PreforkedWorker(QUEUE)
+        task = Task.create(task_func)
+        QUEUE.enqueue(task)
+        task = Task.create(stop, (pid,))
         QUEUE.enqueue(task)
         worker.run()
+        assert os.read(r, 4) == TEST_STRING
 
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
@@ -57,21 +112,20 @@ class TestWorker(object):
 
         pid = os.getpid()
         _exit = os._exit
-        _close = os.close
 
         def exit(n):
             assert n == 1  # the parent worker will requeue task if its child's exit code is 1
             os.kill(pid, signal.SIGHUP)
             _exit(n)
 
-        def close(fd):
+        def _close(fd):
             if os.getpid() == pid:
-                _close(fd)
+                close(fd)
             else:
                 raise Exception('close error')
 
         monkeypatch.setattr(os, '_exit', exit)
-        monkeypatch.setattr(os, 'close', close)
+        monkeypatch.setattr(os, 'close', _close)
 
         worker = ForkedWorker(QUEUE)
         task = Task.create(func, (1, 2))
@@ -88,37 +142,36 @@ class TestWorker(object):
 
 class TestForkedWorker(object):
     def test_run(self):
-        def success_handler(task):
-            os.kill(pid, signal.SIGHUP)
-
-        def error_handler(task, kill_signal, exc_info):
-            os.write(w, ERROR_STRING)
-            os.kill(pid, signal.SIGHUP)
-
         def kill_child():
             assert os.read(r, 1) == b'1'
             os.kill(worker._child_pid, signal.SIGTERM)
 
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        pid = os.getpid()
+        global r, w
         r, w = os.pipe()
+        pid = os.getpid()
+
         task = Task.create(os.write, (w, TEST_STRING), timeout=10)
         QUEUE.enqueue(task)
-        worker = ForkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
+        task = Task.create(stop, (pid,))
+        QUEUE.enqueue(task)
+        worker = ForkedWorker(QUEUE)
         worker.run()
         assert os.read(r, 4) == TEST_STRING
 
-        task = Task.create(error_func)
+        task = Task.create(error_func, (pid,), error_handler=error_handler)
         QUEUE.enqueue(task)
         worker.run()
         assert os.read(r, 5) == ERROR_STRING
 
         DELAY(os.write)(w, TEST_STRING)
+        task = Task.create(stop, (pid,))
+        QUEUE.enqueue(task)
         worker.run()
         assert os.read(r, 4) == TEST_STRING
 
-        task = Task.create(wait, (w,))
+        task = Task.create(wait, (os.getpid(),), error_handler=error_handler)
         QUEUE.enqueue(task)
         threading.Thread(target=kill_child).start()
         worker.run()
@@ -128,25 +181,20 @@ class TestForkedWorker(object):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_task(self, monkeypatch):
-        def success_handler(task):
-            os.write(w, TEST_STRING)
-
-        def error_handler(task, kill_signal, exc_info):
-            os.write(w, ERROR_STRING)
-
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
         monkeypatch.setattr(os, '_exit', lambda n: None)
 
+        global r, w
         r, w = os.pipe()
-        task1 = Task.create(func, (1, 2))
+        task1 = Task.create(task_func)
         QUEUE.enqueue(task1)
-        worker = ForkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
+        worker = ForkedWorker(QUEUE)
         worker._register_signals()
         worker._run_task(task1)
         assert os.read(r, 4) == TEST_STRING
 
-        task2 = Task.create(error_func)
+        task2 = Task.create(error_func, (0,), error_handler=error_handler2)
         QUEUE.enqueue(task2)
         worker._register_signals()
         worker._run_task(task2)
@@ -158,9 +206,8 @@ class TestForkedWorker(object):
         with pytest.raises(SystemExit) as exc_info:
             worker._run_task(task3)
         assert exc_info.value.code is None
-        assert os.read(r, 4) == TEST_STRING
 
-        task4 = Task.create(sys.exit, (1,))
+        task4 = Task.create(sys.exit, (1,), error_handler=error_handler2)
         QUEUE.enqueue(task4)
         worker._register_signals()
         with pytest.raises(SystemExit) as exc_info:
@@ -175,14 +222,12 @@ class TestForkedWorker(object):
     def test_term_worker(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        def error_handler(task, kill_signal, exc_info):
-            assert kill_signal == signal.SIGTERM
-            worker.stop()
-
+        global r, w
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+
+        task = Task.create(wait, (os.getpid(),), timeout=0.01, error_handler=error_handler3)
         QUEUE.enqueue(task)
-        worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker = ForkedWorker(QUEUE, kill_timeout=0.1)
         worker.run()
 
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
@@ -192,14 +237,9 @@ class TestForkedWorker(object):
 
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-        def error_handler(task, kill_signal, exc_info):
-            assert kill_signal == signal.SIGKILL
-            worker.stop()
-
-        r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = Task.create(wait, (os.getpid(),), timeout=0.01, error_handler=error_handler4)
         QUEUE.enqueue(task)
-        worker = ForkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker = ForkedWorker(QUEUE, kill_timeout=0.1)
         worker.run()
 
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
@@ -208,41 +248,38 @@ class TestForkedWorker(object):
 
 class TestPreforkedWorker(object):
     def test_run(self):
-        def success_handler(task):
-            global COUNT
-            COUNT += 1
-            if COUNT % 2 == 0:
-                os.kill(pid, signal.SIGHUP)
-
-        def error_handler(task, kill_signal, exc_info):
-            os.write(w, ERROR_STRING)
-            os.kill(pid, signal.SIGHUP)
-
         def kill_child():
             assert os.read(r, 1) == b'1'
             os.kill(worker._child_pid, signal.SIGTERM)
 
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
+
+        global r, w
         pid = os.getpid()
         r, w = os.pipe()
-        for _ in range(2):
-            task = Task.create(os.write, (w, TEST_STRING), timeout=100)
-            QUEUE.enqueue(task)
-        worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
+
+        task = Task.create(task_func)
+        QUEUE.enqueue(task)
+        task = Task.create(task_func, timeout=100)
+        QUEUE.enqueue(task)
+        task = Task.create(stop, (pid,))
+        QUEUE.enqueue(task)
+        worker = PreforkedWorker(QUEUE)
         worker.run()
         assert os.read(r, 8) == TEST_STRING * 2
 
-        task = Task.create(error_func)
+        task = Task.create(error_func, (pid,), error_handler=error_handler)
         QUEUE.enqueue(task)
         worker.run()
         assert os.read(r, 5) == ERROR_STRING
 
-        DELAY(os.write)(w, TEST_STRING)
-        DELAY(os.write)(w, TEST_STRING)
+        DELAY(task_func)()
+        delay_with_params(QUEUE)(timeout=100)(task_func)()
+        DELAY(stop)(pid)
         worker.run()
         assert os.read(r, 8) == TEST_STRING * 2
 
-        task = Task.create(wait, (w,))
+        task = Task.create(wait, (os.getpid(),), timeout=0.01, error_handler=error_handler3)
         QUEUE.enqueue(task)
         threading.Thread(target=kill_child).start()
         worker.run()
@@ -252,31 +289,30 @@ class TestPreforkedWorker(object):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks(self, monkeypatch):
-        close = os.close
-
-        def success_handler(task):
-            os.write(w, TEST_STRING)
-            os.write(task_writer, struct.pack('=I', len(task2.data)) + task2.data)
-
-        def error_handler(task, kill_signal, exc_info):
-            os.write(w, ERROR_STRING)
-            close(task_writer)
-
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        monkeypatch.setattr(os, '_exit', lambda n: None)
-        monkeypatch.setattr(os, 'close', lambda n: None)
+        def noop(_):
+            return
 
+        monkeypatch.setattr(os, '_exit', noop)
+        monkeypatch.setattr(os, 'close', noop)
+
+        global r, w
         r, w = os.pipe()
-        task1 = Task.create(func, (1, 2))
-        QUEUE.enqueue(task1)
-        task2 = Task.create(error_func)
-        QUEUE.enqueue(task2)
 
-        worker = PreforkedWorker(QUEUE, success_handler=success_handler, error_handler=error_handler)
+        worker = PreforkedWorker(QUEUE)
         worker._register_signals()
         worker._task_channel = _, task_writer = non_blocking_pipe()
         worker._result_channel = non_blocking_pipe()
+
+        # let task1 send the data of task2 to the task writer
+        task2 = Task.create(error_func, kwargs={'task_writer': task_writer}, error_handler=error_handler5)
+        task2.serialize()
+        data = struct.pack('=I', len(task2.data)) + task2.data
+        task1 = Task.create(task_func2, (task_writer, data))
+        QUEUE.enqueue(task1)
+        QUEUE.enqueue(task2)
+
         os.write(task_writer, struct.pack('=I', len(task1.data)) + task1.data)
         worker._run_tasks()
 
@@ -286,26 +322,22 @@ class TestPreforkedWorker(object):
         close(worker._task_channel[0])
         close(worker._result_channel[1])
 
-        def success_handler2(task):
-            os.write(w, TEST_STRING)
-            os.write(task_writer, struct.pack('=I', len(task4.data)) + task4.data)
-
-        task3 = Task.create(sys.exit)
-        QUEUE.enqueue(task3)
-        task4 = Task.create(sys.exit, (1,))
-        QUEUE.enqueue(task4)
-
-        worker = PreforkedWorker(QUEUE, success_handler=success_handler2, error_handler=error_handler)
+        worker = PreforkedWorker(QUEUE)
         worker._register_signals()
         worker._task_channel = _, task_writer = non_blocking_pipe()
         worker._result_channel = non_blocking_pipe()
 
+        task3 = Task.create(exit_func, (0,))
+        QUEUE.enqueue(task3)
+        task4 = Task.create(exit_func, (1,), {'task_writer': task_writer}, error_handler=error_handler5)
+        QUEUE.enqueue(task4)
+
         os.write(task_writer, struct.pack('=I', len(task3.data)) + task3.data)
         with pytest.raises(SystemExit) as exc_info:
             worker._run_tasks()
-        assert exc_info.value.code is None
-        assert os.read(r, 4) == TEST_STRING
+        assert exc_info.value.code == 0
 
+        os.write(task_writer, struct.pack('=I', len(task4.data)) + task4.data)
         worker._register_signals()
         with pytest.raises(SystemExit) as exc_info:
             worker._run_tasks()
@@ -320,15 +352,12 @@ class TestPreforkedWorker(object):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
     def test_run_tasks_with_large_size(self):
+        global r, w
         r, w = os.pipe()
 
-        def success_handler(task):
-            os.write(w, TEST_STRING)
-            os._exit(0)
-
-        task = Task.create(func, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
+        task = Task.create(task_func3, (b'1' * BUF_SIZE, b'2' * BUF_SIZE))
         QUEUE.enqueue(task)
-        worker = PreforkedWorker(QUEUE, success_handler=success_handler)
+        worker = PreforkedWorker(QUEUE)
         worker._register_signals()
         worker._task_channel = non_blocking_pipe()
         worker._result_channel = non_blocking_pipe()
@@ -385,14 +414,12 @@ class TestPreforkedWorker(object):
     def test_term_worker(self):
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
 
-        def error_handler(task, kill_signal, exc_info):
-            assert kill_signal == signal.SIGTERM
-            worker.stop()
-
+        global r, w
         r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+
+        task = Task.create(wait, (os.getpid(),), timeout=0.01, error_handler=error_handler3)
         QUEUE.enqueue(task)
-        worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker = PreforkedWorker(QUEUE, kill_timeout=0.1)
         worker.run()
 
         CONN.delete(QUEUE_NAME, ENQUEUED_KEY, DEQUEUED_KEY, NOTI_KEY)
@@ -402,14 +429,9 @@ class TestPreforkedWorker(object):
 
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-        def error_handler(task, kill_signal, exc_info):
-            assert kill_signal == signal.SIGKILL
-            worker.stop()
-
-        r, w = os.pipe()
-        task = Task.create(wait, (w,), timeout=0.01)
+        task = Task.create(wait, (os.getpid(),), timeout=0.01, error_handler=error_handler4)
         QUEUE.enqueue(task)
-        worker = PreforkedWorker(QUEUE, kill_timeout=0.1, error_handler=error_handler)
+        worker = PreforkedWorker(QUEUE, kill_timeout=0.1)
         worker.run()
 
         signal.signal(signal.SIGTERM, signal.SIG_DFL)

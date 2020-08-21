@@ -47,26 +47,28 @@ class Task(object):
 
     Args:
         id (int or None): The task id.
-        module_name (str): The module name of the task function.
-        func_name (str): The function name of the task function.
+        func_path (str): The task function path.
+            The format should be "module_path.func_name".
         args (list or tuple): Variable length argument list of the task function.
             It should be picklable.
         kwargs (dict): Arbitrary keyword arguments of the task function.
             It should be picklable.
         timeout (int or float): The timeout in seconds of the task.
         prior (bool): A prior task will be inserted at the first position.
+        error_handler_path (str): The error handler path.
+            If it's not empty, the error handler will be called after the task failed.
     """
 
-    __slots__ = ['_id', '_module_name', '_func_name', '_args', '_kwargs', '_timeout', '_prior', '_data']
+    __slots__ = ['_id', '_func_path', '_args', '_kwargs', '_timeout', '_prior', '_error_handler_path', '_data']
 
-    def __init__(self, id, module_name, func_name, args=None, kwargs=None, timeout=None, prior=False):
+    def __init__(self, id, func_path, args=None, kwargs=None, timeout=None, prior=False, error_handler_path=None):
         self._id = id
-        self._module_name = module_name
-        self._func_name = func_name
+        self._func_path = func_path
         self._args = () if args is None else args
         self._kwargs = {} if kwargs is None else kwargs
         self._timeout = timeout
         self._prior = prior
+        self._error_handler_path = error_handler_path
         self._data = None
 
     @property
@@ -79,12 +81,8 @@ class Task(object):
         self._data = None
 
     @property
-    def module_name(self):
-        return self._module_name
-
-    @property
-    def func_name(self):
-        return self._func_name
+    def func_path(self):
+        return self._func_path
 
     @property
     def args(self):
@@ -103,11 +101,15 @@ class Task(object):
         return self._prior
 
     @property
+    def error_handler_path(self):
+        return self._error_handler_path
+
+    @property
     def data(self):
         return self._data
 
     @classmethod
-    def create(cls, func, args=None, kwargs=None, timeout=None, prior=False):
+    def create(cls, func, args=None, kwargs=None, timeout=None, prior=False, error_handler=None):
         """Create a task.
 
         Args:
@@ -119,13 +121,19 @@ class Task(object):
                 It should be picklable.
             timeout (int or float): The timeout in seconds of the task.
             prior (bool): A prior task will be inserted at the first position.
+            error_handler (callable): The error handler.
+                If it's not empty, it will be called after the task failed.
 
         Returns:
             Task: The created task.
         """
         if timeout:
             timeout = timeout * 1000
-        return cls(None, func.__module__, func.__name__, args, kwargs, timeout, prior)
+        if error_handler:
+            error_handler_path = '.'.join((error_handler.__module__, error_handler.__name__))
+        else:
+            error_handler_path = None
+        return cls(None, '.'.join((func.__module__, func.__name__)), args, kwargs, timeout, prior, error_handler_path)
 
     def serialize(self):
         """Serializes the task to a string.
@@ -134,17 +142,19 @@ class Task(object):
             str: The serialized data.
         """
         if self._data is None:
-            data = self._id, self._module_name, self._func_name, self._args, self._kwargs, self._timeout, self._prior
+            data = self._id, self._func_path, self._args, self._kwargs, self._timeout, self._prior, self._error_handler_path
 
             i = 0
-            if not self._prior:
+            if not self._error_handler_path:
                 i -= 1
-                if self._timeout is None:
+                if not self._prior:
                     i -= 1
-                    if not self._kwargs:
+                    if self._timeout is None:
                         i -= 1
-                        if not self._args:
+                        if not self._kwargs:
                             i -= 1
+                            if not self._args:
+                                i -= 1
             if i < 0:
                 data = data[:i]
             self._data = dumps(data)
@@ -171,6 +181,27 @@ class Task(object):
             Any: The result of the task function.
         """
         logger.debug('Running task %d.', self.id)
-        module = import_module(self._module_name)
-        func = getattr(module, self._func_name)
+        module_path, func_name = self._func_path.rsplit('.', 1)
+        module = import_module(module_path)
+        func = getattr(module, func_name)
         return func(*self._args, **self._kwargs)
+
+    def handle_error(self, kill_signal, exc_info):
+        """Calls the error handler of the task.
+
+        Args:
+            kill_signal (int or None): The kill signal of the worker. None means not be killed.
+            exc_info (type, Exception, traceback.Traceback): The exception info if the worker raises an
+                uncaught exception.
+        """
+        if self._error_handler_path:
+            logger.debug('Calling the error handler for task %d.', self.id)
+            try:
+                module_path, func_name = self._error_handler_path.rsplit('.', 1)
+                module = import_module(module_path)
+                func = getattr(module, func_name)
+                func(self, kill_signal, exc_info)
+            except Exception:  # pragma: no cover
+                logger.exception('Call the error handler for task %d failed.', self.id)
+            else:
+                logger.debug('Called the error handler for task %d.', self.id)

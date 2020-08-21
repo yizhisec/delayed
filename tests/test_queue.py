@@ -3,7 +3,7 @@
 from delayed.queue import Queue
 from delayed.task import Task
 
-from .common import CONN, DEQUEUED_KEY, ENQUEUED_KEY, func, NOTI_KEY, QUEUE, QUEUE_NAME
+from .common import CONN, DEQUEUED_KEY, ENQUEUED_KEY, error_handler, func, NOTI_KEY, QUEUE, QUEUE_NAME
 
 
 class TestQueue(object):
@@ -32,7 +32,7 @@ class TestQueue(object):
 
         task1 = Task.create(func, (1, 2))
         task2 = Task.create(func, (3,), {'b': 4})
-        task3 = Task.create(func, kwargs={'a': 5, 'b': 6}, prior=True)
+        task3 = Task.create(func, kwargs={'a': 5, 'b': 6}, prior=True, error_handler=error_handler)
         QUEUE.enqueue(task1)
         QUEUE.enqueue(task2)
         QUEUE.enqueue(task3)
@@ -42,13 +42,13 @@ class TestQueue(object):
         assert CONN.llen(NOTI_KEY) == 2
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 1
-        assert task3.id == task3.id
-        assert task.module_name == 'tests.common'
-        assert task.func_name == 'func'
+        assert task.id == task3.id
+        assert task.func_path == 'tests.common.func'
         assert task.args == ()
         assert task.kwargs == {'a': 5, 'b': 6}
         assert task.prior
         assert task.data is not None
+        assert task.error_handler_path == 'tests.common.error_handler'
 
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 1
@@ -56,12 +56,12 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 2
         assert task.id == task1.id
-        assert task.module_name == 'tests.common'
-        assert task.func_name == 'func'
+        assert task.func_path == 'tests.common.func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert not task.prior
         assert task.data is not None
+        assert task.error_handler_path is None
 
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 0
@@ -69,12 +69,12 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 3
         assert task.id == task2.id
-        assert task.module_name == 'tests.common'
-        assert task.func_name == 'func'
+        assert task.func_path == 'tests.common.func'
         assert task.args == (3,)
         assert task.kwargs == {'b': 4}
         assert task.data is not None
         assert not task.prior
+        assert task.error_handler_path is None
 
         CONN.delete(DEQUEUED_KEY, ENQUEUED_KEY)
 

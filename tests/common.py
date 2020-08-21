@@ -18,3 +18,7 @@ DELAY = delay(QUEUE)
 
 def func(a, b):
     return a + b
+
+
+def error_handler(task, kill_signal, exc_info):
+    pass

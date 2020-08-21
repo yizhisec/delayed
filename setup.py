@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 
 with open('README.md', 'r') as f:
@@ -15,7 +15,7 @@ setup(
     author='keakon',
     author_email='keakon@gmail.com',
     url='https://github.com/yizhisec/delayed',
-    packages=find_packages(exclude=('tests',)),
+    packages=('delayed',),
     python_requires='>=2.7',
     install_requires=['hiredis', 'redis'],
     classifiers=[

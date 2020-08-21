@@ -41,7 +41,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     queue = Queue(name='default', conn=conn)
     ```
 
-4. Three ways to enqueue a task:
+4. Four ways to enqueue a task:
 
     * Define a task function and enqueue it:
 
@@ -58,26 +58,40 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         delayed_add.delay(1, b=2)  # same as above
         delayed_add(1, 2)  # call it immediately
         ```
-
     * Directly enqueue a function:
 
         ```python
-        from delayed.delay import delay
+        from delayed.delay import delay, delayed
 
         delay = delay(queue)
+        delayed = delayed(queue)
 
         def add(a, b):
             return a + b
 
         delay(add)(1, 2)
         delay(add)(1, b=2)  # same as above
+
+        delayed()(add).delay(1, 2)
+        delayed()(add).delay(1, b=2)  # same as above
+        ```
+    * Create a task and enqueue it:
+
+        ```python
+        from delayed.task import Task
+
+        def add(a, b):
+            return a + b
+
+        task = Task.create(func=add, args=(1,), kwargs={'b': 2})
+        queue.enqueue(task)
         ```
     * Enqueue a predefined task function without importing it:
 
         ```python
         from delayed.task import Task
 
-        task = Task(func_path='test.add', args=(1,), kwargs={'b': 2})
+        task = Task(id=None, func_path='test.add', args=(1,), kwargs={'b': 2})
         queue.enqueue(task)
         ```
 
@@ -105,6 +119,17 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     queue = Queue(name='default', conn=conn)
     sweeper = Sweeper(queue=queue)
     sweeper.run()
+    ```
+
+## Examples
+
+See [examples](examples).
+
+    ```bash
+    $ redis-server &
+    $ pip install delayed
+    $ python -m examples.caller &
+    $ python -m examples.forked_worker  # or python -m examples.preforked_worker
     ```
 
 ## QA
@@ -186,7 +211,7 @@ A: You can set `default_timeout` of a queue or `timeout` of a task:
 A: You can set `prior` of the task to `True`:
 
     ```python
-    task = Task(func_path='test.add', args=(1, 2), prior=True)
+    task = Task(id=None, func_path='test.add', args=(1, 2), prior=True)
     queue.enqueue(task)
     ```
 
@@ -249,6 +274,10 @@ To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
     ```
 
 ## Release notes
+
+* 0.9:
+    1. Adds `prior` and `error_handler` params to `deleyed.delayed()`, removes its `timeout()` method.
+    2. Adds [examples](examples).
 
 * 0.8:
     1. The `Task` struct has been changed, it's not compatible with older versions.

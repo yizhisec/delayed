@@ -12,23 +12,16 @@ def delayed(queue):
     Returns:
         callable: A decorator.
     """
-    def wrapper(timeout=None):
-        def outer(func):
+    def outer(timeout=None, prior=False, error_handler=None):
+        def wrapper(func):
             def _delay(*args, **kwargs):
-                task = Task.create(func, args, kwargs, timeout)
+                task = Task.create(func, args, kwargs, timeout, prior, error_handler)
                 queue.enqueue(task)
 
-            def _timeout(timeout):
-                def inner(*args, **kwargs):
-                    task = Task.create(func, args, kwargs, timeout)
-                    queue.enqueue(task)
-                return inner
-
             func.delay = _delay
-            func.timeout = _timeout
             return func
-        return outer
-    return wrapper
+        return wrapper
+    return outer
 
 
 def delay(queue):
@@ -57,7 +50,7 @@ def delay_with_params(queue):
     Returns:
         callable: A decorator.
     """
-    def outer(timeout=None, prior=True, error_handler=None):
+    def outer(timeout=None, prior=False, error_handler=None):
         def wrapper(func):
             def _delay(*args, **kwargs):
                 task = Task.create(func, args, kwargs, timeout, prior, error_handler)

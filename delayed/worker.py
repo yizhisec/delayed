@@ -122,7 +122,7 @@ class ForkedWorker(Worker):
         super(ForkedWorker, self)._register_signals()
         signal.signal(signal.SIGCHLD, ignore_signal)
 
-        self._waker = r, w = non_blocking_pipe()
+        self._waker = _, w = non_blocking_pipe()
         signal.set_wakeup_fd(w)
         self._child_pid = None
 

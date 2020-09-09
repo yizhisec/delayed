@@ -43,12 +43,12 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 1
         assert task.id == task3.id
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == ()
         assert task.kwargs == {'a': 5, 'b': 6}
         assert task.prior
         assert task.data is not None
-        assert task.error_handler_path == 'tests.common.error_handler'
+        assert task.error_handler_path == 'tests.common:error_handler'
 
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 1
@@ -56,7 +56,7 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 2
         assert task.id == task1.id
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert not task.prior
@@ -69,7 +69,7 @@ class TestQueue(object):
         assert CONN.zcard(ENQUEUED_KEY) == 3
         assert CONN.zcard(DEQUEUED_KEY) == 3
         assert task.id == task2.id
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (3,)
         assert task.kwargs == {'b': 4}
         assert task.data is not None

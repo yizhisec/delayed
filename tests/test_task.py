@@ -15,12 +15,12 @@ from .common import error_handler, func
 class TestTask(object):
     def test_create(self):
         task = Task.create(func, (1, 2), timeout=10, prior=True, error_handler=error_handler)
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout == 10000
         assert task.prior
-        assert task.error_handler_path == 'tests.common.error_handler'
+        assert task.error_handler_path == 'tests.common:error_handler'
 
     def test_serialize_and_deserialize(self):
         task = Task.create(func, (1, 2))
@@ -29,7 +29,7 @@ class TestTask(object):
         assert data == task.data
 
         task = Task.deserialize(data)
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout is None
@@ -39,7 +39,7 @@ class TestTask(object):
         task = Task.create(func, (1,), {'b': 2})
         data = task.serialize()
         task = Task.deserialize(data)
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (1,)
         assert task.kwargs == {'b': 2}
         assert task.timeout is None
@@ -49,12 +49,12 @@ class TestTask(object):
         task = Task.create(func, kwargs={'a': 1, 'b': 2}, timeout=10, prior=True, error_handler=error_handler)
         data = task.serialize()
         task = Task.deserialize(data)
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == ()
         assert task.kwargs == {'a': 1, 'b': 2}
         assert task.timeout == 10000
         assert task.prior
-        assert task.error_handler_path == 'tests.common.error_handler'
+        assert task.error_handler_path == 'tests.common:error_handler'
 
     def test_run(self):
         task = Task.create(func, (1, 2))
@@ -75,7 +75,7 @@ def test_set_pickle_protocol_version():
         assert data != last_data
 
         task = Task.deserialize(data)
-        assert task.func_path == 'tests.common.func'
+        assert task.func_path == 'tests.common:func'
         assert task.args == (1, 2)
         assert task.kwargs == {}
         assert task.timeout is None

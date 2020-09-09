@@ -91,7 +91,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         ```python
         from delayed.task import Task
 
-        task = Task(id=None, func_path='test.add', args=(1,), kwargs={'b': 2})
+        task = Task(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
         queue.enqueue(task)
         ```
 
@@ -117,7 +117,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 
     conn = redis.Redis()
     queue = Queue(name='default', conn=conn)
-    sweeper = Sweeper(queue=queue)
+    sweeper = Sweeper(queues=[queue])
     sweeper.run()
     ```
 
@@ -128,8 +128,9 @@ See [examples](examples).
     ```bash
     $ redis-server &
     $ pip install delayed
-    $ python -m examples.caller &
-    $ python -m examples.forked_worker  # or python -m examples.preforked_worker
+    $ python -m examples.sweeper &
+    $ python -m examples.forked_worker &  # or python -m examples.preforked_worker &
+    $ python -m examples.caller
     ```
 
 ## QA
@@ -211,7 +212,7 @@ A: You can set `default_timeout` of a queue or `timeout` of a task:
 A: You can set `prior` of the task to `True`:
 
     ```python
-    task = Task(id=None, func_path='test.add', args=(1, 2), prior=True)
+    task = Task(id=None, func_path='test:add', args=(1, 2), prior=True)
     queue.enqueue(task)
     ```
 
@@ -234,7 +235,7 @@ A: Sets the `error_handler` of the task. The handlers would be called in a forke
     def error2():
         raise Exception
 
-    task = Task.create(func_path='test.error2', error_handler=error_handler)
+    task = Task.create(func_path='test:error2', error_handler=error_handler)
     ```
 
 12. **Q: Why does sometimes the `error_handler` not be called for a failed task?**  
@@ -275,15 +276,19 @@ To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
 
 ## Release notes
 
+* 0.10:
+    1. The `Sweeper` can handle multiple queues now. Its `queue` param has been changed to `queues`. (BREAKING CHANGE)
+    2. Changes the separator between `module_path` and `func_name` from `.` to `:`. (BREAKING CHANGE)
+
 * 0.9:
-    1. Adds `prior` and `error_handler` params to `deleyed.delayed()`, removes its `timeout()` method.
+    1. Adds `prior` and `error_handler` params to `deleyed.delayed()`, removes its `timeout()` method. (BREAKING CHANGE)
     2. Adds [examples](examples).
 
 * 0.8:
-    1. The `Task` struct has been changed, it's not compatible with older versions.
+    1. The `Task` struct has been changed, it's not compatible with older versions. (BREAKING CHANGE)
         * Removes `module_name` and `func_name` from `Task`, adds `func_path` instead.
         * Adds `error_handler_path` to `Task`.
-    2. Removes `success_handler` and `error_handler` from `Worker`.
+    2. Removes `success_handler` and `error_handler` from `Worker`. (BREAKING CHANGE)
 
 * 0.7:
     1. Implements prior task.
@@ -298,7 +303,7 @@ To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
     1. Refactories and fixes bugs.
 
 * 0.3:
-    1. Changes param `second` to `timeout` for `delayed.delayed()`.
+    1. Changes param `second` to `timeout` for `delayed.delayed()`. (BREAKING CHANGE)
     2. Adds debug log.
 
 * 0.2:

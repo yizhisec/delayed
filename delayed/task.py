@@ -6,6 +6,7 @@ except ImportError:  # pragma: no cover
     import pickle
 from importlib import import_module
 
+from .constants import SEP
 from .logger import logger
 
 
@@ -48,7 +49,7 @@ class Task(object):
     Args:
         id (int or None): The task id.
         func_path (str): The task function path.
-            The format should be "module_path.func_name".
+            The format should be "module_path:func_name".
         args (list or tuple): Variable length argument list of the task function.
             It should be picklable.
         kwargs (dict): Arbitrary keyword arguments of the task function.
@@ -130,10 +131,10 @@ class Task(object):
         if timeout:
             timeout = timeout * 1000
         if error_handler:
-            error_handler_path = '.'.join((error_handler.__module__, error_handler.__name__))
+            error_handler_path = error_handler.__module__ + SEP + error_handler.__name__
         else:
             error_handler_path = None
-        return cls(None, '.'.join((func.__module__, func.__name__)), args, kwargs, timeout, prior, error_handler_path)
+        return cls(None, func.__module__ + SEP + func.__name__, args, kwargs, timeout, prior, error_handler_path)
 
     def serialize(self):
         """Serializes the task to a string.
@@ -181,7 +182,7 @@ class Task(object):
             Any: The result of the task function.
         """
         logger.debug('Running task %d.', self.id)
-        module_path, func_name = self._func_path.rsplit('.', 1)
+        module_path, func_name = self._func_path.rsplit(SEP, 1)
         module = import_module(module_path)
         func = getattr(module, func_name)
         return func(*self._args, **self._kwargs)
@@ -197,7 +198,7 @@ class Task(object):
         if self._error_handler_path:
             logger.debug('Calling the error handler for task %d.', self.id)
             try:
-                module_path, func_name = self._error_handler_path.rsplit('.', 1)
+                module_path, func_name = self._error_handler_path.rsplit(SEP, 1)
                 module = import_module(module_path)
                 func = getattr(module, func_name)
                 func(self, kill_signal, exc_info)

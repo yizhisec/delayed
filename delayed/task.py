@@ -182,7 +182,7 @@ class Task(object):
             Any: The result of the task function.
         """
         logger.debug('Running task %d.', self.id)
-        module_path, func_name = self._func_path.rsplit(SEP, 1)
+        module_path, func_name = self._func_path.split(SEP, 1)
         module = import_module(module_path)
         func = getattr(module, func_name)
         return func(*self._args, **self._kwargs)
@@ -198,7 +198,7 @@ class Task(object):
         if self._error_handler_path:
             logger.debug('Calling the error handler for task %d.', self.id)
             try:
-                module_path, func_name = self._error_handler_path.rsplit(SEP, 1)
+                module_path, func_name = self._error_handler_path.split(SEP, 1)
                 module = import_module(module_path)
                 func = getattr(module, func_name)
                 func(self, kill_signal, exc_info)

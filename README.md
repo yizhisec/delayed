@@ -276,6 +276,9 @@ To fix it, you can set a lower value to `delayed.constants.BUF_SIZE`:
 
 ## Release notes
 
+* 0.11:
+    1. Sleeps random time when a `Worker` fails to pop a `task` before retrying.
+
 * 0.10:
     1. The `Sweeper` can handle multiple queues now. Its `queue` param has been changed to `queues`. (BREAKING CHANGE)
     2. Changes the separator between `module_path` and `func_name` from `.` to `:`. (BREAKING CHANGE)

@@ -3,10 +3,11 @@
 import errno
 import fcntl
 import os
+import random
 import select
 import time
 
-from .constants import BUF_SIZE
+from .constants import BUF_SIZE, MAX_SLEEP_COUNT, MIN_SLEEP_TIME
 
 
 def ignore_signal(signum, frame):
@@ -180,3 +181,9 @@ def current_timestamp():
         int: Current timestamp.
     """
     return int(time.time() * 1000)
+
+
+def retry_time(count, max_count=MAX_SLEEP_COUNT, min_time=MIN_SLEEP_TIME):
+    if count > max_count:
+        count = max_count
+    return random.uniform(min_time, 1 << count)

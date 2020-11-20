@@ -4,7 +4,7 @@ import io
 import os
 
 import delayed.utils
-from delayed.utils import drain_out, non_blocking_pipe, read_bytes
+from delayed.utils import drain_out, non_blocking_pipe, read_bytes, retry_time
 
 
 def test_drain_out():
@@ -34,3 +34,11 @@ def test_read_bytes():
 
     os.close(w)
     os.close(r)
+
+
+def test_retry_time():
+    for _ in range(1000):
+        assert 1 <= retry_time(1) <= 2
+        assert 1 <= retry_time(5) <= 32
+        assert 1 <= retry_time(7) <= 128
+        assert 1 <= retry_time(10) <= 128

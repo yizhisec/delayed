@@ -12,7 +12,7 @@ import time
 from .logger import logger
 from .constants import BUF_SIZE, SIGNAL_MASK, Status
 from .task import Task
-from .utils import (drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes,
+from .utils import (drain_out, ignore_signal, non_blocking_pipe, read1, read_bytes, retry_time,
                     select_ignore_eintr, try_write, wait_pid_ignore_eintr, write_byte)
 
 
@@ -91,12 +91,16 @@ class ForkedWorker(Worker):
         self._register_signals()
 
         try:
+            count = 0
             while self._status == Status.RUNNING:
                 try:
                     task = self._queue.dequeue()
                 except Exception:  # pragma: no cover
                     logger.exception('Dequeue task failed.')
+                    count += 1
+                    time.sleep(retry_time(count))
                 else:
+                    count = 0
                     if task:
                         gc.disable()  # https://bugs.python.org/issue1336
                         try:
@@ -226,12 +230,16 @@ class PreforkedWorker(Worker):
         self._register_signals()
 
         try:
+            count = 0
             while self._status == Status.RUNNING:
                 try:
                     task = self._queue.dequeue()
                 except Exception:  # pragma: no cover
                     logger.exception('Dequeue task failed.')
+                    count += 1
+                    time.sleep(retry_time(count))
                 else:
+                    count = 0
                     if task:
                         if not self._child_pid:
                             self._task_channel = non_blocking_pipe()

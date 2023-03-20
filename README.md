@@ -7,15 +7,16 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
 ## Features
 
 * Robust: all the enqueued tasks will run exactly once, even if the worker got killed at any time.
-* Clean: finished tasks (including failed) won't take the space of your Redis.
+* Clean: finished tasks (including failed) take no space of your Redis.
 * Distributed: workers as more as needed can run in the same time without further config.
+* Portable: its Go and Python version can call each other.
 
 ## Requirements
 
-1. Python 2.7 or later, tested on Python 2.7, 3.3 - 3.9, PyPy and PyPy3.
-2. UNIX-like systems (with os.fork() implemented), tested on Ubuntu and macOS.
-3. Redis 2.6.0 or later.
-4. Keeps syncing time among all the machines of each task queue.
+* Robust: all the enqueued tasks will run exactly once, even if the worker got killed at any time.
+* Clean: finished tasks (including failed) take no space of your Redis.
+* Distributed: workers as more as needed can run in the same time without further config.
+* Portable: its Go and Python version can call each other.
 
 ## Getting started
 
@@ -41,58 +42,67 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
     queue = Queue(name='default', conn=conn)
     ```
 
-4. Four ways to enqueue a task:
 
-    * Define a task function and enqueue it:
+4. Enqueue tasks:
+    * Four ways to enqueue a Python task:
+        1. Define a task function and enqueue it:
+
+            ```python
+            from delayed.delay import delayed
+
+            delayed = delayed(queue)
+
+            @delayed()
+            def delayed_add(a, b):
+                return a + b
+
+            delayed_add.delay(1, 2)  # enqueue delayed_add
+            delayed_add.delay(1, b=2)  # same as above
+            delayed_add(1, 2)  # call it immediately
+            ```
+        2. Directly enqueue a function:
+
+            ```python
+            from delayed.delay import delay, delayed
+
+            delay = delay(queue)
+            delayed = delayed(queue)
+
+            def add(a, b):
+                return a + b
+
+            delay(add)(1, 2)
+            delay(add)(1, b=2)  # same as above
+
+            delayed()(add).delay(1, 2)
+            delayed()(add).delay(1, b=2)  # same as above
+            ```
+        3. Create a task and enqueue it:
+
+            ```python
+            from delayed.task import Task
+
+            def add(a, b):
+                return a + b
+
+            task = Task.create(func=add, args=(1,), kwargs={'b': 2})
+            queue.enqueue(task)
+            ```
+        4. Enqueue a predefined task function without importing it:
+
+            ```python
+            from delayed.task import Task
+
+            task = Task(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
+            queue.enqueue(task)
+            ```
+    * Enqueue Go task:
 
         ```python
-        from delayed.delay import delayed
+            from delayed.task import GoTask
 
-        delayed = delayed(queue)
-
-        @delayed()
-        def delayed_add(a, b):
-            return a + b
-
-        delayed_add.delay(1, 2)  # enqueue delayed_add
-        delayed_add.delay(1, b=2)  # same as above
-        delayed_add(1, 2)  # call it immediately
-        ```
-    * Directly enqueue a function:
-
-        ```python
-        from delayed.delay import delay, delayed
-
-        delay = delay(queue)
-        delayed = delayed(queue)
-
-        def add(a, b):
-            return a + b
-
-        delay(add)(1, 2)
-        delay(add)(1, b=2)  # same as above
-
-        delayed()(add).delay(1, 2)
-        delayed()(add).delay(1, b=2)  # same as above
-        ```
-    * Create a task and enqueue it:
-
-        ```python
-        from delayed.task import Task
-
-        def add(a, b):
-            return a + b
-
-        task = Task.create(func=add, args=(1,), kwargs={'b': 2})
-        queue.enqueue(task)
-        ```
-    * Enqueue a predefined task function without importing it:
-
-        ```python
-        from delayed.task import Task
-
-        task = Task(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
-        queue.enqueue(task)
+            task = GoTask(id=None, func_path='main.test', args=(1, 2))
+            queue.enqueue(task)
         ```
 
 5. Run a task worker (or more) in a separated process:

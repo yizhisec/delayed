@@ -12,7 +12,8 @@ from .common import CONN, func, QUEUE, QUEUE_NAME, NOTI_KEY
 
 class TestSweeper(object):
     def test_run(self):
-        CONN.delete(QUEUE_NAME)
+        noti_key = 'test' + _NOTI_KEY_SUFFIX
+        CONN.delete(QUEUE_NAME, NOTI_KEY, noti_key)
 
         # queue = Queue(QUEUE_NAME, CONN)
         queue = Queue('test', CONN)
@@ -35,7 +36,7 @@ class TestSweeper(object):
 
         task2 = Task.create(func, (1, 2))
         queue.enqueue(task2)
-        CONN.lpop('test' + _NOTI_KEY_SUFFIX)
+        CONN.lpop(noti_key)
 
         task2 = queue.dequeue()
         assert task2 is not None

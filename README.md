@@ -185,7 +185,7 @@ A: Adds a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest
     3. Removes `ForkedWorker` and `PreforkedWorker`. You can use `Worker` instead. (BREAKING CHANGE)
     4. Changes params of `Queue()`, removes `default_timeout`, `requeue_timeout` and `busy_len`, adds `dequeue_timeout` and `keep_alive_timeout`. (BREAKING CHANGE)
     5. Removes `timeout`, `prior` and `error_handler_path` params of `Task()`. (BREAKING CHANGE)
-    6. `Task.create()` now accepts both callable and str as its `func` param.
+    6. `Task.create()` now accepts both `callable` and `str` as its `func` param.
     7. Removes `delayed.delay()`. Removes params of `delayed.delayed()`. (BREAKING CHANGE)
 
 * 0.11:

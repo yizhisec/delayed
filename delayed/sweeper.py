@@ -32,12 +32,12 @@ class Sweeper(object):
                 try:
                     queue.requeue_lost()
                 except Exception:  # pragma: no cover
-                    logger.exception('Requeue lost tasks failed.')
+                    logger.exception('Failed to requeue lost tasks.')
 
         self._status = Status.STOPPED
         logger.debug('Sweeper stopped.')
 
     def stop(self):
         """Stops the sweeper."""
-        self._status = Status.STOPPING
         logger.debug('Stopping the sweeper.')
+        self._status = Status.STOPPING

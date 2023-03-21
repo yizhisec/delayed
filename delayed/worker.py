@@ -17,10 +17,10 @@ class Worker(object):
         queue (delayed.queue.Queue): The task queue of the worker.
     """
 
-    def __init__(self, queue, keep_alive_duration=15):
+    def __init__(self, queue, keep_alive_interval=15):
         queue._worker_id = self._id = binascii.hexlify(os.urandom(16))
         self._queue = queue
-        self._keep_alive_duration = keep_alive_duration
+        self.keep_alive_interval = keep_alive_interval
         self._status = Status.STOPPED
 
     def run(self):  # pragma: no cover

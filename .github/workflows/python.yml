@@ -9,7 +9,7 @@ on: [ push, pull_request ]
   #     - '*.md'
 
 jobs:
-  test-ubuntu:
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true

@@ -20,7 +20,7 @@ class Worker(object):
     def __init__(self, queue, keep_alive_interval=15):
         queue._worker_id = self._id = binascii.hexlify(os.urandom(16))
         self._queue = queue
-        self.keep_alive_interval = keep_alive_interval
+        self._keep_alive_interval = keep_alive_interval
         self._status = Status.STOPPED
 
     def run(self):  # pragma: no cover

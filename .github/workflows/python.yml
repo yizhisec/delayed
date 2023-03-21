@@ -10,7 +10,7 @@ on:
 
 jobs:
   test-ubuntu-latest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     strategy:
       fail-fast: true
       matrix:

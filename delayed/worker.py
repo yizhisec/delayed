@@ -3,6 +3,7 @@
 import binascii
 import os
 import signal
+import threading
 import time
 
 from .constants import DEFAULT_SLEEP_TIME, MAX_SLEEP_TIME, Status
@@ -22,6 +23,7 @@ class Worker(object):
         self._queue = queue
         self._keep_alive_interval = keep_alive_interval
         self._status = Status.STOPPED
+        self._cond = threading.Condition()
 
     def run(self):  # pragma: no cover
         """Runs the worker."""
@@ -29,7 +31,8 @@ class Worker(object):
         self._status = Status.RUNNING
         self._register_signals()
 
-        KeepAliveThread(self).start()
+        thread = KeepAliveThread(self)
+        thread.start()
 
         try:
             sleep_time = DEFAULT_SLEEP_TIME
@@ -55,6 +58,9 @@ class Worker(object):
         finally:
             self._unregister_signals()
             self._status = Status.STOPPED
+            with self._cond:
+                self._cond.notify()
+            thread.join()
             logger.debug('Stopped worker %s.', self._id)
 
     def stop(self):

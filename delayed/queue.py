@@ -132,5 +132,7 @@ class Queue(object):
 
     def _die(self):
         """Set the worker of the queue dead."""
+        with open('l', 'wb') as f:
+            f.write(self._worker_id)
         self._conn.delete(self._worker_id)
         logger.debug('Worker %s dies.', self._worker_id)

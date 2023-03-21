@@ -48,7 +48,7 @@ class Queue(object):
         name (str): The task queue name.
         conn (redis.Redis): A redis connection.
         dequeue_timeout (int or float): The dequeue timeout in seconds of the task queue.
-            The task queue will block at most dequeue_timeout seconds for receiving a new task.
+            The task queue will block at most `dequeue_timeout` seconds for receiving a new task.
         keep_alive_timeout (int or float): The keep alive timeout in seconds of the worker.
     """
 
@@ -111,7 +111,7 @@ class Queue(object):
     def requeue_lost(self):
         """Requeues lost tasks.
         It should be called periodically to prevent losing tasks.
-        The lost tasks were those popped from the queue, but its dead worker hadn't release it.
+        The lost tasks were those popped from the queue, but its dead worker hadn't released it.
 
         Returns:
             int: The requeued task count.

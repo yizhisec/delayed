@@ -16,6 +16,7 @@ class Worker(object):
 
     Args:
         queue (delayed.queue.Queue): The task queue of the worker.
+        keep_alive_interval (int or float): The worker marks itself as alive for every `keep_alive_interval` seconds.
     """
 
     def __init__(self, queue, keep_alive_interval=15):
@@ -52,7 +53,7 @@ class Worker(object):
                             task.execute()
                         except Exception:
                             logger.exception('Failed to execute task %d.', task._id)
-                            self._queue.enqueue(task)
+                            self._requeue_task(task)
                         else:
                             self._release_task()
         finally:
@@ -73,7 +74,7 @@ class Worker(object):
         """Requeues a dequeued task.
 
         Args:
-            task (delayed.task.Task): The task to be enqueued.
+            task (delayed.task.Task): The task to be requeued.
         """
         logger.debug('Requeuing task %d', task._id)
         try:

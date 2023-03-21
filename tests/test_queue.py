@@ -15,11 +15,17 @@ class TestQueue(object):
         assert CONN.llen(QUEUE_NAME) == 1
         assert CONN.llen(NOTI_KEY) == 1
 
-        task2 = Task(None, 'tests.common:func', (1, 2))
+        task2 = Task.create('tests.common:func', (1, 2))
         QUEUE.enqueue(task2)
         assert task2.id == task.id + 1
         assert CONN.llen(QUEUE_NAME) == 2
         assert CONN.llen(NOTI_KEY) == 2
+
+        task3 = Task(None, 'tests.common:func', (1, 2))
+        QUEUE.enqueue(task3)
+        assert task3.id == task2.id + 1
+        assert CONN.llen(QUEUE_NAME) == 3
+        assert CONN.llen(NOTI_KEY) == 3
         CONN.delete(QUEUE_NAME, NOTI_KEY)
 
     def test_dequeue(self):

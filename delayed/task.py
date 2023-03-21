@@ -59,15 +59,19 @@ class Task(object):
         """Create a task.
 
         Args:
-            func (callable): The task function.
-                It should be defined in module level (except the `__main__` module).
+            func (callable or str): The task function or function path.
+                The function should be defined in module level (except the `__main__` module).
             args (list or tuple): Variable length argument list of the task function.
             kwargs (dict): Arbitrary keyword arguments of the task function.
 
         Returns:
             Task: The created task.
         """
-        return cls(None, func.__module__ + SEP + func.__name__, args, kwargs)
+        if isinstance(func, str):
+            return cls(None, func, args, kwargs)
+        if callable(func):
+            return cls(None, func.__module__ + SEP + func.__name__, args, kwargs)
+        raise ValueError('Invalid func %r' % func)
 
     def serialize(self):
         """Serializes the task to a string.

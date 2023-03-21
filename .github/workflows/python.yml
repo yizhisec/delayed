@@ -47,7 +47,7 @@ jobs:
       run: |
         pytest
 
-  test-ubuntu-18.04:
+  test-ubuntu-1804:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true

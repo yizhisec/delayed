@@ -2,7 +2,7 @@
 
 from functools import wraps
 
-from .task import Task
+from .task import PyTask
 
 
 def delayed(queue):
@@ -19,7 +19,7 @@ def delayed(queue):
     def wrapper(func):
         @wraps(func)
         def _delay(*args, **kwargs):
-            task = Task.create(func, args, kwargs)
+            task = PyTask.create(func, args, kwargs)
             queue.enqueue(task)
 
         func.delay = _delay

@@ -3,7 +3,7 @@
 import os
 import signal
 
-from delayed.task import Task
+from delayed.task import PyTask
 
 from .common import CONN, NOTI_KEY, PROCESSING_KEY, QUEUE, QUEUE_NAME, WORKER
 
@@ -16,7 +16,7 @@ class TestWorker(object):
     def test_run(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, PROCESSING_KEY)
 
-        task = Task.create(stop, (os.getpid(),))
+        task = PyTask.create(stop, (os.getpid(),))
         QUEUE.enqueue(task)
         WORKER.run()
 

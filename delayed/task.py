@@ -8,13 +8,13 @@ from .constants import SEP
 from .logger import logger
 
 
-class Task(object):
-    """Task is the class of a task.
+class PyTask(object):
+    """PyTask is the class of a Python task.
 
     Args:
         id (int or None): The task id.
         func_path (str): The task function path.
-            The format should be "module_path:func_name".
+            The format is "module_path:func_name".
         args (list or tuple): Variable length argument list of the task function.
         kwargs (dict): Arbitrary keyword arguments of the task function. (Python task only.)
     """
@@ -28,32 +28,6 @@ class Task(object):
         self._kwargs = {} if kwargs is None else kwargs
         self._data = None
 
-    @property
-    def id(self):
-        return self._id
-
-    @id.setter
-    def id(self, val):
-        if self._id != val:
-            self._id = val
-            self._data = None
-
-    @property
-    def func_path(self):
-        return self._func_path
-
-    @property
-    def args(self):
-        return self._args
-
-    @property
-    def kwargs(self):
-        return self._kwargs
-
-    @property
-    def data(self):
-        return self._data
-
     @classmethod
     def create(cls, func, args=None, kwargs=None):
         """Create a task.
@@ -65,7 +39,7 @@ class Task(object):
             kwargs (dict): Arbitrary keyword arguments of the task function.
 
         Returns:
-            Task: The created task.
+            PyTask: The created task.
         """
         if isinstance(func, str):
             return cls(None, func, args, kwargs)
@@ -74,7 +48,7 @@ class Task(object):
         raise ValueError('Invalid func %r' % func)
 
     def serialize(self):
-        """Serializes the task to a string.
+        """Serializes the task to bytes.
 
         Returns:
             str: The serialized data.
@@ -94,13 +68,13 @@ class Task(object):
 
     @classmethod
     def deserialize(cls, data):
-        """Deserialize a task from a string.
+        """Deserialize a task from the bytes.
 
         Args:
             data (str): The string to be deserialize.
 
         Returns:
-            Task: The deserialized task.
+            PyTask: The deserialized task.
         """
         task = cls(*unpackb(data))
         task._data = data
@@ -117,3 +91,53 @@ class Task(object):
         module = import_module(module_path)
         func = getattr(module, func_name)
         return func(*self._args, **self._kwargs)
+
+
+class GoTask(object):
+    """GoTask is the class of a Go task.
+
+    Args:
+        id (int or None): The task id.
+        func_path (str): The task function path.
+            The format is "package/path.func_name".
+        args (any): Arguments of the task function.
+    """
+
+    __slots__ = ['_id', '_func_path', '_args', '_payload', '_data']
+
+    def __init__(self, id, func_path, args=None):
+        self._id = id
+        self._func_path = func_path
+        self._args = args
+        self._payload = None
+        self._data = None
+
+    @classmethod
+    def create(cls, func_path, args=None):
+        """Create a task.
+
+        Args:
+            func_path (str): The task function path.
+            args (any): Variable length argument list of the task function.
+
+        Returns:
+            PyTask: The created task.
+        """
+        return cls(None, func_path, args)
+
+    def serialize(self):
+        """Serializes the task to bytes.
+
+        Returns:
+            str: The serialized data.
+        """
+        if self._data is None:
+            if self._payload is None and self._args is not None:
+                logger.info(self._args)
+                self._payload = packb(self._args)
+                logger.info(len(self._payload))
+                data = self._id, self._func_path, self._payload
+            else:
+                data = self._id, self._func_path
+            self._data = packb(data)
+        return self._data

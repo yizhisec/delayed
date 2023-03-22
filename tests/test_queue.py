@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from delayed.task import Task
+from delayed.task import PyTask
 
 from .common import CONN, func, NOTI_KEY, PROCESSING_KEY, QUEUE, QUEUE_NAME
 
@@ -9,21 +9,21 @@ class TestQueue(object):
     def test_enqueue(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY)
 
-        task = Task.create(func, (1, 2))
+        task = PyTask.create(func, (1, 2))
         QUEUE.enqueue(task)
-        assert task.id > 0
+        assert task._id > 0
         assert CONN.llen(QUEUE_NAME) == 1
         assert CONN.llen(NOTI_KEY) == 1
 
-        task2 = Task.create('tests.common:func', (1, 2))
+        task2 = PyTask.create('tests.common:func', (1, 2))
         QUEUE.enqueue(task2)
-        assert task2.id == task.id + 1
+        assert task2._id == task._id + 1
         assert CONN.llen(QUEUE_NAME) == 2
         assert CONN.llen(NOTI_KEY) == 2
 
-        task3 = Task(None, 'tests.common:func', (1, 2))
+        task3 = PyTask(None, 'tests.common:func', (1, 2))
         QUEUE.enqueue(task3)
-        assert task3.id == task2.id + 1
+        assert task3._id == task2._id + 1
         assert CONN.llen(QUEUE_NAME) == 3
         assert CONN.llen(NOTI_KEY) == 3
         CONN.delete(QUEUE_NAME, NOTI_KEY)
@@ -33,9 +33,9 @@ class TestQueue(object):
 
         assert QUEUE.dequeue() is None
 
-        task1 = Task.create(func, (1, 2))
-        task2 = Task.create(func, (3,), {'b': 4})
-        task3 = Task.create(func, kwargs={'a': 5, 'b': 6})
+        task1 = PyTask.create(func, (1, 2))
+        task2 = PyTask.create(func, (3,), {'b': 4})
+        task3 = PyTask.create(func, kwargs={'a': 5, 'b': 6})
         QUEUE.enqueue(task1)
         QUEUE.enqueue(task2)
         QUEUE.enqueue(task3)
@@ -43,36 +43,36 @@ class TestQueue(object):
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 2
         assert CONN.llen(NOTI_KEY) == 2
-        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task.data
-        assert task.id == task1.id
-        assert task.func_path == 'tests.common:func'
-        assert task.args == [1, 2]
-        assert task.kwargs == {}
+        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task._data
+        assert task._id == task1._id
+        assert task._func_path == 'tests.common:func'
+        assert task._args == [1, 2]
+        assert task._kwargs == {}
 
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 1
         assert CONN.llen(NOTI_KEY) == 1
-        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task.data
-        assert task.id == task2.id
-        assert task.func_path == 'tests.common:func'
-        assert task.args == [3]
-        assert task.kwargs == {'b': 4}
+        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task._data
+        assert task._id == task2._id
+        assert task._func_path == 'tests.common:func'
+        assert task._args == [3]
+        assert task._kwargs == {'b': 4}
 
         task = QUEUE.dequeue()
         assert CONN.llen(QUEUE_NAME) == 0
         assert CONN.llen(NOTI_KEY) == 0
-        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task.data
-        assert task.id == task3.id
-        assert task.func_path == 'tests.common:func'
-        assert task.args == []
-        assert task.kwargs == {'a': 5, 'b': 6}
+        assert CONN.hget(PROCESSING_KEY, QUEUE._worker_id) == task._data
+        assert task._id == task3._id
+        assert task._func_path == 'tests.common:func'
+        assert task._args == []
+        assert task._kwargs == {'a': 5, 'b': 6}
 
         CONN.delete(QUEUE_NAME, NOTI_KEY, PROCESSING_KEY)
 
     def test_release(self):
         CONN.delete(QUEUE_NAME, NOTI_KEY, PROCESSING_KEY)
 
-        task = Task.create(func, (1, 2))
+        task = PyTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         task = QUEUE.dequeue()
         QUEUE.release()
@@ -85,7 +85,7 @@ class TestQueue(object):
 
         assert QUEUE.len() == 0
 
-        task = Task.create(func, (1, 2))
+        task = PyTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         assert QUEUE.len() == 1
 
@@ -99,7 +99,7 @@ class TestQueue(object):
 
         assert QUEUE.requeue_lost() == 0
 
-        task = Task.create(func, (1, 2))
+        task = PyTask.create(func, (1, 2))
         QUEUE.enqueue(task)
         assert QUEUE.len() == 1
         assert QUEUE.requeue_lost() == 0

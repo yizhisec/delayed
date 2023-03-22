@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from .logger import logger
-from .task import Task
+from .task import PyTask
 
 
 # KEYS: queue_name, processing_key
@@ -68,23 +68,23 @@ class Queue(object):
         """Enqueues a task to the queue.
 
         Args:
-            task (delayed.task.Task): The task to be enqueued.
+            task (delayed.task.PyTask or delayed.task.GoTask): The task to be enqueued.
         """
-        if task.id is None:
-            task.id = self._conn.incr(self._id_key)
-        logger.debug('Enqueuing task %d.', task.id)
+        if task._id is None:
+            task._id = self._conn.incr(self._id_key)
+        logger.debug('Enqueuing task %d.', task._id)
         data = task.serialize()
         with self._conn.pipeline() as pipe:
             pipe.rpush(self._name, data)
             pipe.rpush(self._noti_key, '1')
             pipe.execute()
-        logger.debug('Enqueued task %d', task.id)
+        logger.debug('Enqueued task %d', task._id)
 
     def dequeue(self):
         """Dequeues a task from the queue.
 
         Returns:
-            delayed.task.Task or None: The dequeued task, or None if the queue is empty.
+            delayed.task.PyTask or None: The dequeued task, or None if the queue is empty.
         """
         if self._conn.blpop(self._noti_key, self._dequeue_timeout):
             logger.debug('Popped a task.')
@@ -92,8 +92,8 @@ class Queue(object):
                 keys=(self._name, self._processing_key),
                 args=(self._worker_id,))
             if data:
-                task = Task.deserialize(data)
-                logger.debug('Dequeued task %d.', task.id)
+                task = PyTask.deserialize(data)
+                logger.debug('Dequeued task %d.', task._id)
                 return task
 
     def release(self):

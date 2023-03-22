@@ -75,37 +75,36 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         3. Create a task and enqueue it:
 
             ```python
-            from delayed.task import Task
+            from delayed.task import PyTask
 
             def add(a, b):
                 return a + b
 
-            task = Task.create(func=add, args=(1,), kwargs={'b': 2})
+            task = PyTask.create(func=add, args=(1,), kwargs={'b': 2})
             queue.enqueue(task)
             ```
         4. Enqueue a predefined task function without importing it:
 
             ```python
-            from delayed.task import Task
+            from delayed.task import PyTask
 
-            task = Task.create(func='test:add', args=(1,), kwargs={'b': 2})
+            task = PyTask.create(func='test:add', args=(1,), kwargs={'b': 2})
             queue.enqueue(task)
 
-            task = Task(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
+            task = PyTask(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
             queue.enqueue(task)
             ```
     * Enqueue Go tasks:
 
         ```python
-            from delayed.task import Task
+            from delayed.task import GoTask
 
-            task = Task.create(func='main.test', args=(1,))
+            task = GoTask.create(func_path='syscall.Kill', args=(0, 1))
             queue.enqueue(task)
 
-            task = Task(id=None, func_path='main.test', args=(1,))
+            task = GoTask(id=None, func_path='fmt.Printf', args=('%d %s\n', [1, 'test']))
             queue.enqueue(task)
         ```
-        It's the same as the last way to enqueue Python tasks but without `kwargs`.
 
 5. Run a task worker (or more) in a separated process:
 
@@ -180,13 +179,15 @@ A: Adds a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest
 ## Release notes
 
 * 1.0:
-    1. Supports Go.
+    1. Supports Go, adds `GoTask`.
     2. Use MessagePack instead of pickle to serialize / deserialize tasks. (BREAKING CHANGE)
     3. Removes `ForkedWorker` and `PreforkedWorker`. You can use `Worker` instead. (BREAKING CHANGE)
     4. Changes params of `Queue()`, removes `default_timeout`, `requeue_timeout` and `busy_len`, adds `dequeue_timeout` and `keep_alive_timeout`. (BREAKING CHANGE)
-    5. Removes `timeout`, `prior` and `error_handler_path` params of `Task()`. (BREAKING CHANGE)
-    6. `Task.create()` now accepts both `callable` and `str` as its `func` param.
-    7. Removes `delayed.delay()`. Removes params of `delayed.delayed()`. (BREAKING CHANGE)
+    5. Rename `Task` to `PyTask`. (BREAKING CHANGE)
+    6. Removes those properties of `PyTask`: `id`, `func_path`, `args` and `kwargs`. (BREAKING CHANGE)
+    7. Removes those params of `PyTask()` and `PyTask.create()`: `timeout`, `prior` and `error_handler_path`. (BREAKING CHANGE)
+    8. `PyTask.create()` now accepts both `callable` and `str` as its `func` param.
+    9. Removes `delayed.delay()`. Removes params of `delayed.delayed()`. (BREAKING CHANGE)
 
 * 0.11:
     1. Sleeps random time when a `Worker` fails to pop a `task` before retrying.

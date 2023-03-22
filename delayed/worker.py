@@ -74,7 +74,7 @@ class Worker(object):
         """Requeues a dequeued task.
 
         Args:
-            task (delayed.task.Task): The task to be requeued.
+            task (delayed.task.PyTask): The task to be requeued.
         """
         logger.debug('Requeuing task %d', task._id)
         try:

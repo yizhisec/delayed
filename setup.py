@@ -17,7 +17,7 @@ setup(
     url='https://github.com/yizhisec/delayed',
     packages=('delayed',),
     python_requires='>=2.7',
-    install_requires=['hiredis', 'redis'],
+    install_requires=['hiredis', 'redis', 'msgpack'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',

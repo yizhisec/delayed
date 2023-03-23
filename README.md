@@ -96,10 +96,13 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
         ```python
             from delayed.task import GoTask
 
-            task = GoTask.create(func_path='syscall.Kill', args=(0, 1))
+            task = GoTask(func_path='syscall.Kill', args=(0, 1))
             queue.enqueue(task)
 
-            task = GoTask(id=None, func_path='fmt.Printf', args=('%d %s\n', [1, 'test']))
+            task = GoTask(func_path='fmt.Printf', args=('%d %s\n', [1, 'test']))  # the variadic argument needs to be a list or tuple
+            queue.enqueue(task)
+
+            task = GoTask('fmt.Println', (1, 'test'))  # // if the variadic argument is the only argument, it's not required to wrap it with a list or tuple
             queue.enqueue(task)
         ```
 

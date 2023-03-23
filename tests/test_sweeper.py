@@ -20,7 +20,7 @@ class TestSweeper(object):
         queue._worker_id = 'test'
         sweeper = Sweeper([QUEUE, queue], 0.05)
 
-        task = PyTask.create(func, (1, 2))
+        task = PyTask(func, (1, 2))
         QUEUE.enqueue(task)
         CONN.lpop(NOTI_KEY)
 
@@ -35,7 +35,7 @@ class TestSweeper(object):
         assert task is not None
         QUEUE.release()
 
-        task2 = PyTask.create(func, (1, 2))
+        task2 = PyTask(func, (1, 2))
         queue.enqueue(task2)
         CONN.lpop(noti_key)
 

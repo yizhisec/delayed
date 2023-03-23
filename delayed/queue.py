@@ -55,7 +55,6 @@ class Queue(object):
     def __init__(self, name, conn, dequeue_timeout=1, keep_alive_timeout=60):
         self._worker_id = None
         self._name = name
-        self._id_key = name + _ID_KEY_SUFFIX
         self._noti_key = name + _NOTI_KEY_SUFFIX
         self._processing_key = name + _PROCESSING_KEY_SUFFIX
         self._conn = conn
@@ -70,15 +69,13 @@ class Queue(object):
         Args:
             task (delayed.task.PyTask or delayed.task.GoTask): The task to be enqueued.
         """
-        if task._id is None:
-            task._id = self._conn.incr(self._id_key)
-        logger.debug('Enqueuing task %d.', task._id)
+        logger.debug('Enqueuing task %s.', task._func_path)
         data = task.serialize()
         with self._conn.pipeline() as pipe:
             pipe.rpush(self._name, data)
             pipe.rpush(self._noti_key, '1')
             pipe.execute()
-        logger.debug('Enqueued task %d', task._id)
+        logger.debug('Enqueued task %s.', task._func_path)
 
     def dequeue(self):
         """Dequeues a task from the queue.
@@ -93,7 +90,7 @@ class Queue(object):
                 args=(self._worker_id,))
             if data:
                 task = PyTask.deserialize(data)
-                logger.debug('Dequeued task %d.', task._id)
+                logger.debug('Dequeued task %s.', task._func_path)
                 return task
 
     def release(self):
@@ -132,7 +129,5 @@ class Queue(object):
 
     def _die(self):
         """Set the worker of the queue dead."""
-        with open('l', 'wb') as f:
-            f.write(self._worker_id)
         self._conn.delete(self._worker_id)
         logger.debug('Worker %s dies.', self._worker_id)

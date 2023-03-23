@@ -52,7 +52,7 @@ class Worker(object):
                         try:
                             task.execute()
                         except Exception:
-                            logger.exception('Failed to execute task %d.', task._id)
+                            logger.exception('Failed to execute task %s.', task._func_path)
                             self._requeue_task(task)
                         else:
                             self._release_task()
@@ -76,11 +76,11 @@ class Worker(object):
         Args:
             task (delayed.task.PyTask): The task to be requeued.
         """
-        logger.debug('Requeuing task %d', task._id)
+        logger.debug('Requeuing task %s', task._func_path)
         try:
             self._queue.enqueue(task)
         except Exception:
-            logger.exception('Failed to requeue task %d', task._id)
+            logger.exception('Failed to requeue task %s', task._func_path)
 
     def _release_task(self):
         """Releases the currently dequeued task."""

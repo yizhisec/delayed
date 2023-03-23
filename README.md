@@ -80,7 +80,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
             def add(a, b):
                 return a + b
 
-            task = PyTask.create(func=add, args=(1,), kwargs={'b': 2})
+            task = PyTask(func=add, args=(1,), kwargs={'b': 2})
             queue.enqueue(task)
             ```
         4. Enqueue a predefined task function without importing it:
@@ -88,10 +88,7 @@ Delayed is a simple but robust task queue inspired by [rq](https://python-rq.org
             ```python
             from delayed.task import PyTask
 
-            task = PyTask.create(func='test:add', args=(1,), kwargs={'b': 2})
-            queue.enqueue(task)
-
-            task = PyTask(id=None, func_path='test:add', args=(1,), kwargs={'b': 2})
+            task = PyTask(func='test:add', args=(1,), kwargs={'b': 2})
             queue.enqueue(task)
             ```
     * Enqueue Go tasks:
@@ -154,7 +151,6 @@ After deserializing, the type of `args` and `kwargs` passed to the task function
 2. **Q: What's the `name` param of a queue?**  
 A: It's the key used to store the tasks of the queue. A queue with name "default" will use those keys:
     * default: list, enqueued tasks.
-    * default_id: str, the next task id.
     * default_noti: list, the same length as enqueued tasks.
     * default_processing: hash, the processing task of workers.
 
@@ -185,9 +181,10 @@ A: Adds a `logging.DEBUG` level handler to `delayed.logger.logger`. The simplest
     4. Changes params of `Queue()`, removes `default_timeout`, `requeue_timeout` and `busy_len`, adds `dequeue_timeout` and `keep_alive_timeout`. (BREAKING CHANGE)
     5. Rename `Task` to `PyTask`. (BREAKING CHANGE)
     6. Removes those properties of `PyTask`: `id`, `func_path`, `args` and `kwargs`. (BREAKING CHANGE)
-    7. Removes those params of `PyTask()` and `PyTask.create()`: `timeout`, `prior` and `error_handler_path`. (BREAKING CHANGE)
-    8. `PyTask.create()` now accepts both `callable` and `str` as its `func` param.
-    9. Removes `delayed.delay()`. Removes params of `delayed.delayed()`. (BREAKING CHANGE)
+    7. Removes those params of `PyTask()`: `id`, `timeout`, `prior` and `error_handler_path`. (BREAKING CHANGE)
+    8. Removes `PyTask.create()`. You can use `PyTask()` instead. (BREAKING CHANGE)
+    9. Rename `func_path` param of `PyTask()` to `func`, it accepts both `callable` and `str`. (BREAKING CHANGE)
+    10. Removes `delayed.delay()`. Removes params of `delayed.delayed()`. (BREAKING CHANGE)
 
 * 0.11:
     1. Sleeps random time when a `Worker` fails to pop a `task` before retrying.

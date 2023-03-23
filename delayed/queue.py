@@ -29,14 +29,13 @@ for i = 1, #processing_tasks, 2 do
 end
 if count > 0 then
     local noti_array = {}
-    for i=1,count,1 do
+    for i = 1, count , 1 do
         table.insert(noti_array, '1')
     end
     redis.call('lpush', KEYS[2], unpack(noti_array))
 end
 return count'''
 
-_ID_KEY_SUFFIX = '_id'
 _NOTI_KEY_SUFFIX = '_noti'
 _PROCESSING_KEY_SUFFIX = '_processing'
 

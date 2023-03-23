@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from delayed.task import PyTask
+from delayed.task import GoTask, PyTask
 
 from .common import func
 
 
-class TestTask(object):
+class TestPyTask(object):
     def test_create(self):
         task = PyTask(func, (1, 2))
         assert task._func_path == 'tests.common:func'
@@ -42,3 +42,17 @@ class TestTask(object):
         data = task.serialize()
         task = PyTask.deserialize(data)
         assert task.execute() == 3
+
+
+class TestGoTask(object):
+    def test_create(self):
+        task = GoTask('test.Func', (1, 2))
+        assert task._func_path == 'test.Func'
+        assert task._args == (1, 2)
+
+    def test_serialize(self):
+        task = GoTask('test.Func', (1, 2))
+        assert task.serialize() is not None
+
+        task = GoTask('test.Func', (1, 2.0, ['test']))
+        assert task.serialize() is not None

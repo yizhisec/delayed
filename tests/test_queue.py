@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from delayed.task import PyTask
+from delayed.task import GoTask, PyTask
 
 from .common import CONN, func, NOTI_KEY, PROCESSING_KEY, QUEUE, QUEUE_NAME
 
@@ -18,6 +18,11 @@ class TestQueue(object):
         QUEUE.enqueue(task2)
         assert CONN.llen(QUEUE_NAME) == 2
         assert CONN.llen(NOTI_KEY) == 2
+
+        task3 = GoTask('test.Func', (1, 2))
+        QUEUE.enqueue(task3)
+        assert CONN.llen(QUEUE_NAME) == 3
+        assert CONN.llen(NOTI_KEY) == 3
 
         CONN.delete(QUEUE_NAME, NOTI_KEY)
 
